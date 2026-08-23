@@ -159,7 +159,7 @@ export default function Home() {
               </h2>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-[#131b2e] border border-slate-800 p-5 rounded-xl">
-                  <p className="text-xs text-slate-400 font-medium">TOTAL DIFEKSA</p>
+                  <p className="text-xs text-slate-400 font-medium">TOTAL DIPERIKSA</p>
                   <p className="text-2xl font-bold text-white mt-2">{result.globalMetrics.totalSubmitted} <span className="text-xs font-normal text-slate-400">video</span></p>
                 </div>
                 <div className="bg-[#131b2e] border border-slate-800 p-5 rounded-xl">
