@@ -5,25 +5,45 @@ import { Upload, Play } from "lucide-react";
 import { parseImportFile } from "@/lib/tiktok/importFile";
 
 interface InputPanelProps {
-  hashtag: string;
-  setHashtag: (val: string) => void;
-  rawUrls: string;
-  setRawUrls: (val: string) => void;
-  isLoading: boolean;
-  onAnalyze: () => void;
+  hashtag?: string;
+  setHashtag?: (val: string) => void;
+  onHashtagChange?: (val: string) => void;
+  rawUrls?: string;
+  setRawUrls?: (val: string) => void;
+  onRawUrlsChange?: (val: string) => void;
+  isLoading?: boolean;
+  onAnalyze?: () => void;
   onImportSuccess?: (urls: string[]) => void;
+  // Fallback opsional untuk me-bypass prop cache lama dari page.tsx
+  useCache?: boolean;
+  setUseCache?: (val: boolean) => void;
+  onUseCacheChange?: (val: boolean) => void;
 }
 
 export const InputPanel: React.FC<InputPanelProps> = ({
-  hashtag,
+  hashtag = "",
   setHashtag,
-  rawUrls,
+  onHashtagChange,
+  rawUrls = "",
   setRawUrls,
-  isLoading,
+  onRawUrlsChange,
+  isLoading = false,
   onAnalyze,
   onImportSuccess,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Helper untuk update hashtag secara aman tanpa peduli nama prop yang dikirim page.tsx
+  const handleHashtagChange = (val: string) => {
+    if (setHashtag) setHashtag(val);
+    if (onHashtagChange) onHashtagChange(val);
+  };
+
+  // Helper untuk update rawUrls secara aman
+  const handleUrlsChange = (val: string) => {
+    if (setRawUrls) setRawUrls(val);
+    if (onRawUrlsChange) onRawUrlsChange(val);
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -42,7 +62,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({
         .filter(Boolean);
 
       const combined = Array.from(new Set([...existingUrls, ...extractedUrls]));
-      setRawUrls(combined.join("\n"));
+      handleUrlsChange(combined.join("\n"));
 
       if (onImportSuccess) {
         onImportSuccess(extractedUrls);
@@ -64,7 +84,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({
         <input
           type="text"
           value={hashtag}
-          onChange={(e) => setHashtag(e.target.value)}
+          onChange={(e) => handleHashtagChange(e.target.value)}
           placeholder="Contoh: BertamuSpecial"
           className="w-full bg-[#0B0F19] border border-[#1E293B] rounded-lg px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
         />
@@ -97,7 +117,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({
         <textarea
           rows={6}
           value={rawUrls}
-          onChange={(e) => setRawUrls(e.target.value)}
+          onChange={(e) => handleUrlsChange(e.target.value)}
           placeholder="https://www.tiktok.com/@username/video/123456789&#10;https://vt.tiktok.com/ZSXXXXXX/"
           className="w-full bg-[#0B0F19] border border-[#1E293B] rounded-lg p-4 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition-colors resize-y"
         />
@@ -116,3 +136,5 @@ export const InputPanel: React.FC<InputPanelProps> = ({
     </div>
   );
 };
+
+export default InputPanel;
