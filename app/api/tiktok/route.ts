@@ -4,15 +4,19 @@ import type { TikTokBatchRequest, TikTokBatchResponse } from "@/lib/tiktok/types
 
 const MAX_BATCH_SIZE = 30;
 
-// Helper function untuk menyelesaikan shortlink (vt.tiktok.com / vm.tiktok.com)
+// Resolver shortlink dengan Browser User-Agent agar tidak diblokir TikTok
 async function resolveTikTokUrl(url: string): Promise<string> {
   const trimmedUrl = url.trim();
   if (trimmedUrl.includes("vt.tiktok.com") || trimmedUrl.includes("vm.tiktok.com")) {
     try {
       const response = await fetch(trimmedUrl, {
-        method: "HEAD",
+        method: "GET",
         redirect: "follow",
         cache: "no-store",
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        },
       });
       return response.url || trimmedUrl;
     } catch {
@@ -22,7 +26,6 @@ async function resolveTikTokUrl(url: string): Promise<string> {
   return trimmedUrl;
 }
 
-// Helper delay sederhana untuk jeda sekuensial antar request (menghindari rate-limit 429)
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function POST(request: Request) {
@@ -47,7 +50,7 @@ export async function POST(request: Request) {
 
     const cleanHashtag = targetHashtag.toLowerCase().replace("#", "").trim();
 
-    // Prosese sekuensial dengan resolving shortlink & delay 400ms antar video dalam 1 batch
+    // Memproses URL secara sekuensial dengan jeda 1.2 detik (1200ms) untuk menghindari Rate Limit TikTok (1 req/sec)
     const videos = [];
     for (let i = 0; i < videoUrls.length; i++) {
       const originalUrl = videoUrls[i];
@@ -56,9 +59,8 @@ export async function POST(request: Request) {
       const videoData = await fetchTikTokDataWithRetry(resolvedUrl, cleanHashtag);
       videos.push(videoData);
 
-      // Beri jeda antar pemanggilan jika masih ada antrean
       if (i < videoUrls.length - 1) {
-        await delay(400);
+        await delay(1200);
       }
     }
 
@@ -69,7 +71,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(response, {
       headers: {
-        "Cache-Control": "no-store, max-age=0",
+        "Cache-Control": "no-store, max-age=0, must-revalidate",
       },
     });
   } catch (err) {

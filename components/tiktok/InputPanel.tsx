@@ -1,143 +1,118 @@
 "use client";
 
-import { useRef } from "react";
-import { Loader2, UploadCloud, PlayCircle } from "lucide-react";
+import React, { useRef } from "react";
+import { Upload, Play } from "lucide-react";
+import { parseImportFile } from "@/lib/tiktok/importFile";
 
-interface Props {
-  targetHashtag: string;
-  onHashtagChange: (v: string) => void;
-  urlsInput: string;
-  onUrlsInputChange: (v: string) => void;
-  onImportFile: (file: File) => void;
-  onScan: () => void;
-  loading: boolean;
-  progress: { done: number; total: number } | null;
-  error: string;
-  importInfo: string;
-  forceRefresh: boolean;
-  onForceRefreshChange: (v: boolean) => void;
-  onClearCache: () => void;
+interface InputPanelProps {
+  hashtag: string;
+  setHashtag: (val: string) => void;
+  rawUrls: string;
+  setRawUrls: (val: string) => void;
+  isLoading: boolean;
+  onAnalyze: () => void;
+  onImportSuccess?: (urls: string[]) => void;
 }
 
-export default function InputPanel({
-  targetHashtag,
-  onHashtagChange,
-  urlsInput,
-  onUrlsInputChange,
-  onImportFile,
-  onScan,
-  loading,
-  progress,
-  error,
-  importInfo,
-  forceRefresh,
-  onForceRefreshChange,
-  onClearCache,
-}: Props) {
+export const InputPanel: React.FC<InputPanelProps> = ({
+  hashtag,
+  setHashtag,
+  rawUrls,
+  setRawUrls,
+  isLoading,
+  onAnalyze,
+  onImportSuccess,
+}) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const progressPct = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const extractedUrls = await parseImportFile(file);
+      if (extractedUrls.length === 0) {
+        alert("Tidak ditemukan URL TikTok valid dalam file tersebut.");
+        return;
+      }
+
+      const existingUrls = rawUrls
+        .split("\n")
+        .map((u) => u.trim())
+        .filter(Boolean);
+
+      const combined = Array.from(new Set([...existingUrls, ...extractedUrls]));
+      setRawUrls(combined.join("\n"));
+
+      if (onImportSuccess) {
+        onImportSuccess(extractedUrls);
+      }
+    } catch {
+      alert("Gagal membaca file. Pastikan format file adalah .xlsx atau .csv");
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   return (
-    <div className="bg-[#131b2e] border border-[#1e293b] rounded-xl p-6 shadow-xl space-y-5">
-      <div className="space-y-2">
-        <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
+    <div className="bg-[#131B2E] border border-[#1E293B] rounded-xl p-6 shadow-xl mb-8 space-y-6">
+      {/* Input Hashtag */}
+      <div>
+        <label className="block text-xs font-bold tracking-wider text-slate-400 uppercase mb-2">
           Hashtag Syarat Kampanye
         </label>
         <input
           type="text"
-          value={targetHashtag}
-          onChange={(e) => onHashtagChange(e.target.value)}
+          value={hashtag}
+          onChange={(e) => setHashtag(e.target.value)}
           placeholder="Contoh: BertamuSpecial"
-          className="w-full bg-[#0b0f19] border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-500 transition-colors"
+          className="w-full bg-[#0B0F19] border border-[#1E293B] rounded-lg px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
         />
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
-            Daftar Link Video TikTok (1 URL per baris)
+      {/* Input Textarea & Import File Button */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <label className="block text-xs font-bold tracking-wider text-slate-400 uppercase">
+            Daftar Link Video TikTok (1 URL Per Baris)
           </label>
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="inline-flex items-center gap-1.5 text-[11px] font-medium text-cyan-400 hover:text-cyan-300 border border-cyan-900/50 hover:border-cyan-700 bg-cyan-950/20 px-2.5 py-1 rounded-md transition-colors cursor-pointer"
-          >
-            <UploadCloud className="w-3.5 h-3.5" />
-            Import Excel / CSV
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) onImportFile(file);
-              e.target.value = "";
-            }}
-          />
+          <div>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              accept=".xlsx, .xls, .csv"
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-1.5 text-xs font-semibold text-cyan-400 hover:text-cyan-300 bg-cyan-950/40 border border-cyan-800/50 hover:border-cyan-500/50 px-3 py-1.5 rounded-lg transition-all"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              Import Excel / CSV
+            </button>
+          </div>
         </div>
         <textarea
-          rows={5}
-          value={urlsInput}
-          onChange={(e) => onUrlsInputChange(e.target.value)}
-          placeholder="https://www.tiktok.com/@username/video/123456789"
-          className="w-full bg-[#0b0f19] border border-slate-700 rounded-lg p-4 text-sm text-white focus:outline-none focus:border-cyan-500 font-mono transition-colors"
+          rows={6}
+          value={rawUrls}
+          onChange={(e) => setRawUrls(e.target.value)}
+          placeholder="https://www.tiktok.com/@username/video/123456789&#10;https://vt.tiktok.com/ZSXXXXXX/"
+          className="w-full bg-[#0B0F19] border border-[#1E293B] rounded-lg p-4 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition-colors resize-y"
         />
-        {importInfo && <p className="text-xs text-slate-500">{importInfo}</p>}
-
-        <div className="flex items-center justify-between pt-1">
-          <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={forceRefresh}
-              onChange={(e) => onForceRefreshChange(e.target.checked)}
-              className="accent-cyan-500"
-            />
-            Abaikan cache (ambil data views terbaru)
-          </label>
-          <button
-            type="button"
-            onClick={onClearCache}
-            className="text-[11px] text-slate-500 hover:text-slate-300 underline underline-offset-2 cursor-pointer"
-          >
-            Hapus cache lokal
-          </button>
-        </div>
       </div>
 
-      {error && (
-        <div className="p-3 bg-red-950/50 border border-red-800 text-red-300 text-sm rounded-lg">{error}</div>
-      )}
-
+      {/* Submit Button */}
       <button
-        onClick={onScan}
-        disabled={loading}
-        className="w-full bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 text-white font-medium py-3 px-6 rounded-lg transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+        type="button"
+        disabled={isLoading || !hashtag || !rawUrls.trim()}
+        onClick={onAnalyze}
+        className="w-full bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-white font-semibold py-3.5 px-6 rounded-lg flex items-center justify-center gap-2 transition-all shadow-lg shadow-cyan-950/50"
       >
-        {loading ? (
-          <>
-            <Loader2 className="w-5 h-5 animate-spin" />
-            {progress
-              ? `Memproses ${progress.done} / ${progress.total} video... (${progressPct}%)`
-              : "Memproses Data TikTok..."}
-          </>
-        ) : (
-          <>
-            <PlayCircle className="w-5 h-5" />
-            Verifikasi & Kelompokkan Per Username
-          </>
-        )}
+        <Play className="w-4 h-4 fill-current" />
+        {isLoading ? "Memproses Data Real-Time..." : "Verifikasi & Kelompokkan Per Username"}
       </button>
-
-      {loading && progress && (
-        <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-cyan-500 transition-all duration-300"
-            style={{ width: `${progressPct}%` }}
-          />
-        </div>
-      )}
     </div>
   );
-}
+};
