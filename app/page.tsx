@@ -11,7 +11,6 @@ import type {
 } from "@/lib/tiktok/types";
 import { chunkArray } from "@/lib/tiktok/chunk";
 import { setManyInCache, clearCache } from "@/lib/tiktok/cache";
-import { parseImportFile } from "@/lib/tiktok/importFile";
 import { exportResultToExcel } from "@/lib/tiktok/exportExcel";
 import { exportResultToPdf } from "@/lib/tiktok/exportPdf";
 import { computeGlobalMetrics, groupVideosByCreator } from "@/lib/tiktok/aggregate";
@@ -59,7 +58,7 @@ export default function Home() {
   const [importInfo, setImportInfo] = useState("");
 
   const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   const [allVideos, setAllVideos] = useState<VideoItem[]>([]);
 
@@ -153,7 +152,6 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#0b0f19] text-slate-100 p-4 md:p-8 font-sans">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header / Branding */}
         <header className="border-b border-[#1e293b] pb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider mb-1 text-cyan-400">
@@ -170,10 +168,14 @@ export default function Home() {
         </header>
 
         <InputPanel
-          hashtag={targetHashtag}
-          setHashtag={setTargetHashtag}
+          targetHashtag={targetHashtag}
+          setTargetHashtag={setTargetHashtag}
+          onHashtagChange={setTargetHashtag}
+          urlsInput={urlsInput}
+          setUrlsInput={setUrlsInput}
           rawUrls={urlsInput}
           setRawUrls={setUrlsInput}
+          onRawUrlsChange={setUrlsInput}
           onAnalyze={handleScan}
           isLoading={loading}
           onImportSuccess={(urls: string[]) => {
