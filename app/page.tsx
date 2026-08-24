@@ -57,7 +57,6 @@ export default function Home() {
   const [targetHashtag, setTargetHashtag] = useState("");
   const [urlsInput, setUrlsInput] = useState("");
   const [importInfo, setImportInfo] = useState("");
-  const [forceRefresh, setForceRefresh] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
@@ -75,20 +74,18 @@ export default function Home() {
 
   async function handleImportFile(file: File) {
     try {
-      const result = await parseImportFile(file);
-      const urls = Array.isArray(result) ? result : (result as any).urls || [];
-      
-      if (urls.length === 0) {
+      const extractedUrls = await parseImportFile(file);
+      if (!extractedUrls || extractedUrls.length === 0) {
         setImportInfo(`Tidak ada URL TikTok yang ditemukan di file "${file.name}".`);
         return;
       }
       const existing = parseUrlsFromText(urlsInput);
       const existingSet = new Set(existing);
-      const newOnes = urls.filter((u: string) => !existingSet.has(u));
+      const newOnes = extractedUrls.filter((u: string) => !existingSet.has(u));
       const merged = [...existing, ...newOnes];
       setUrlsInput(merged.join("\n"));
       setImportInfo(
-        `Ditemukan ${urls.length} URL dari "${file.name}" (${newOnes.length} baru ditambahkan).`
+        `Ditemukan ${extractedUrls.length} URL dari "${file.name}" (${newOnes.length} baru ditambahkan).`
       );
     } catch {
       setImportInfo(`Gagal membaca file "${file.name}". Pastikan formatnya .xlsx, .xls, atau .csv.`);
@@ -101,12 +98,12 @@ export default function Home() {
     setLoading(true);
     setError("");
     setAllVideos([]);
-    
+
     const cleanHashtag = targetHashtag.replace(/^#/, "").trim();
     const urls = parseUrlsFromText(urlsInput);
 
     const chunks = chunkArray(urls, 10);
-    const toCache: any[] = [];
+    const toCache: { sourceUrl: string; video: VideoItem }[] = [];
 
     setProgress({ done: 0, total: urls.length });
 
@@ -122,15 +119,15 @@ export default function Home() {
         const data = (await res.json()) as TikTokBatchResponse;
 
         if (!res.ok) {
-          throw new Error((data as any).error || "Request batch gagal");
+          throw new Error((data as unknown as { error?: string }).error || "Request batch gagal");
         }
 
         if (data.videos) {
           setAllVideos((prev) => [...prev, ...data.videos]);
           toCache.push(...data.videos.map((v) => ({ sourceUrl: v.sourceUrl, video: v })));
         }
-      } catch (err) {
-        const errored = chunk.map((u) => makeErrorVideo(u, "Gagal menghubungi server"));
+      } catch {
+        const errored = chunk.map((u: string) => makeErrorVideo(u, "Gagal menghubungi server"));
         setAllVideos((prev) => [...prev, ...errored]);
       }
 
@@ -142,11 +139,6 @@ export default function Home() {
     }
 
     setLoading(false);
-  }
-
-  async function handleClearCache() {
-    await clearCache();
-    setImportInfo("Cache lokal dibersihkan.");
   }
 
   const globalMetrics = useMemo(() => computeGlobalMetrics(allVideos), [allVideos]);
@@ -208,12 +200,18 @@ export default function Home() {
           onRawUrlsChange={setUrlsInput}
           onAnalyze={handleScan}
           isLoading={loading}
-          onImportSuccess={(urls) => {
+          onImportSuccess={(urls: string[]) => {
             const existing = parseUrlsFromText(urlsInput);
             const combined = Array.from(new Set([...existing, ...urls]));
             setUrlsInput(combined.join("\n"));
           }}
         />
+
+        {importInfo && (
+          <div className="text-xs text-cyan-400 bg-cyan-950/30 border border-cyan-800/50 p-3 rounded-lg">
+            {importInfo}
+          </div>
+        )}
 
         {hasResult && (
           <div className="space-y-6 animate-fadeIn">
