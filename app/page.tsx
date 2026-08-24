@@ -9,12 +9,12 @@ import type {
   VideoSortKey,
   ViewMode,
 } from "@/lib/tiktok/types";
-import { chunkArray, runChunksWithConcurrency } from "@/lib/tiktok/chunk";
-import { getManyFromCache, setManyInCache, clearCache } from "@/lib/tiktok/cache";
+import { chunkArray } from "@/lib/tiktok/chunk";
+import { setManyInCache, clearCache } from "@/lib/tiktok/cache";
 import { parseImportFile } from "@/lib/tiktok/importFile";
 import { exportResultToExcel } from "@/lib/tiktok/exportExcel";
 import { exportResultToPdf } from "@/lib/tiktok/exportPdf";
-import { applyHashtagStatus, computeGlobalMetrics, groupVideosByCreator } from "@/lib/tiktok/aggregate";
+import { computeGlobalMetrics, groupVideosByCreator } from "@/lib/tiktok/aggregate";
 import { filterVideos, sortCreators, sortVideos } from "@/lib/tiktok/filterSort";
 
 import InputPanel from "@/components/tiktok/InputPanel";
@@ -23,12 +23,6 @@ import Toolbar from "@/components/tiktok/Toolbar";
 import FolderView from "@/components/tiktok/FolderView";
 import MasterTable from "@/components/tiktok/MasterTable";
 import CreatorDrawer from "@/components/tiktok/CreatorDrawer";
-
-// Ukuran per-chunk yang dikirim ke /api/tiktok, dan berapa chunk yang boleh
-// berjalan bersamaan. Diseimbangkan supaya cepat untuk 1.000+ link tanpa
-// terlalu agresif membombardir TikWM/TikTok (berisiko rate-limit).
-const CHUNK_SIZE = 12;
-const CONCURRENCY = 3;
 
 function parseUrlsFromText(text: string): string[] {
   const seen = new Set<string>();
@@ -82,19 +76,19 @@ export default function Home() {
   async function handleImportFile(file: File) {
     try {
       const result = await parseImportFile(file);
-      if (result.urls.length === 0) {
+      const urls = Array.isArray(result) ? result : (result as any).urls || [];
+      
+      if (urls.length === 0) {
         setImportInfo(`Tidak ada URL TikTok yang ditemukan di file "${file.name}".`);
         return;
       }
       const existing = parseUrlsFromText(urlsInput);
       const existingSet = new Set(existing);
-      const newOnes = result.urls.filter((u) => !existingSet.has(u));
+      const newOnes = urls.filter((u: string) => !existingSet.has(u));
       const merged = [...existing, ...newOnes];
       setUrlsInput(merged.join("\n"));
       setImportInfo(
-        `Ditemukan ${result.urls.length} URL dari "${file.name}" (${newOnes.length} baru ditambahkan, ${
-          result.urls.length - newOnes.length
-        } sudah ada di daftar).`
+        `Ditemukan ${urls.length} URL dari "${file.name}" (${newOnes.length} baru ditambahkan).`
       );
     } catch {
       setImportInfo(`Gagal membaca file "${file.name}". Pastikan formatnya .xlsx, .xls, atau .csv.`);
@@ -102,81 +96,50 @@ export default function Home() {
   }
 
   async function handleScan() {
-    setError("");
-    setSelectedCreatorName(null);
-
-    const urls = parseUrlsFromText(urlsInput);
-    const cleanHashtag = targetHashtag.toLowerCase().replace("#", "").trim();
-
-    if (urls.length === 0) {
-      setError("Harap masukkan minimal 1 URL video TikTok (paste manual atau import Excel/CSV).");
-      return;
-    }
-    if (!cleanHashtag) {
-      setError("Hashtag target tidak boleh kosong.");
-      return;
-    }
+    if (!targetHashtag.trim() || !urlsInput.trim()) return;
 
     setLoading(true);
+    setError("");
+    setAllVideos([]);
+    
+    const cleanHashtag = targetHashtag.replace(/^#/, "").trim();
+    const urls = parseUrlsFromText(urlsInput);
+
+    const chunks = chunkArray(urls, 10);
+    const toCache: any[] = [];
+
     setProgress({ done: 0, total: urls.length });
 
-    const resultsMap = new Map<string, VideoItem>();
-    const toCache: { sourceUrl: string; video: VideoItem }[] = [];
-
-    function pushResults(entries: VideoItem[], sourceUrls: string[]) {
-      entries.forEach((v, i) => {
-        const key = sourceUrls[i] ?? v.sourceUrl;
-        resultsMap.set(key, applyHashtagStatus(v, cleanHashtag));
-      });
-      setAllVideos(urls.map((u) => resultsMap.get(u)).filter((v): v is VideoItem => Boolean(v)));
-    }
-
-    let urlsToFetch = urls;
-
-    if (!forceRefresh) {
-      const cached = await getManyFromCache(urls);
-      if (cached.size > 0) {
-        const cachedEntries = urls.filter((u) => cached.has(u)).map((u) => cached.get(u) as VideoItem);
-        const cachedSourceUrls = urls.filter((u) => cached.has(u));
-        pushResults(cachedEntries, cachedSourceUrls);
-        setProgress({ done: cached.size, total: urls.length });
-      }
-      urlsToFetch = urls.filter((u) => !cached.has(u));
-    }
-
-    const chunks = chunkArray(urlsToFetch, CHUNK_SIZE);
-
-    await runChunksWithConcurrency(
-      chunks,
-      CONCURRENCY,
-      async (chunk) => {
+    for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+      const chunk = chunks[chunkIndex];
+      try {
         const res = await fetch("/api/tiktok", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ videoUrls: chunk, targetHashtag: cleanHashtag }),
         });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || "Request batch gagal");
-        }
-        const data = (await res.json()) as TikTokBatchResponse;
-        return data.videos;
-      },
-      (videos, chunkIndex) => {
-        const chunk = chunks[chunkIndex];
-        if (videos) {
-          pushResults(videos, chunk);
-          toCache.push(...videos.map((v) => ({ sourceUrl: v.sourceUrl, video: v })));
-        } else {
-          // Chunk gagal total (mis. masalah jaringan) — tandai error, jangan hilang diam-diam.
-          const errored = chunk.map((u) => makeErrorVideo(u, "Gagal menghubungi server"));
-          pushResults(errored, chunk);
-        }
-        setProgress((prev) => (prev ? { ...prev, done: Math.min(prev.total, prev.done + chunk.length) } : prev));
-      }
-    );
 
-    if (toCache.length > 0) await setManyInCache(toCache);
+        const data = (await res.json()) as TikTokBatchResponse;
+
+        if (!res.ok) {
+          throw new Error((data as any).error || "Request batch gagal");
+        }
+
+        if (data.videos) {
+          setAllVideos((prev) => [...prev, ...data.videos]);
+          toCache.push(...data.videos.map((v) => ({ sourceUrl: v.sourceUrl, video: v })));
+        }
+      } catch (err) {
+        const errored = chunk.map((u) => makeErrorVideo(u, "Gagal menghubungi server"));
+        setAllVideos((prev) => [...prev, ...errored]);
+      }
+
+      setProgress((prev) => (prev ? { ...prev, done: Math.min(prev.total, prev.done + chunk.length) } : null));
+    }
+
+    if (toCache.length > 0) {
+      await setManyInCache(toCache);
+    }
 
     setLoading(false);
   }
@@ -209,8 +172,6 @@ export default function Home() {
     [filteredVideos, creatorSort]
   );
 
-  // Drawer selalu menampilkan profil kreator LENGKAP (semua video, semua status),
-  // tidak ikut menyempit ketika filter Toolbar berubah setelah drawer dibuka.
   const allCreatorsUnfiltered = useMemo(() => groupVideosByCreator(allVideos), [allVideos]);
   const selectedCreator = useMemo(
     () => allCreatorsUnfiltered.find((c) => c.authorName === selectedCreatorName) ?? null,
@@ -240,18 +201,18 @@ export default function Home() {
 
         <InputPanel
           targetHashtag={targetHashtag}
+          setTargetHashtag={setTargetHashtag}
           onHashtagChange={setTargetHashtag}
-          urlsInput={urlsInput}
-          onUrlsInputChange={setUrlsInput}
-          onImportFile={handleImportFile}
-          onScan={handleScan}
-          loading={loading}
-          progress={progress}
-          error={error}
-          importInfo={importInfo}
-          forceRefresh={forceRefresh}
-          onForceRefreshChange={setForceRefresh}
-          onClearCache={handleClearCache}
+          rawUrls={urlsInput}
+          setRawUrls={setUrlsInput}
+          onRawUrlsChange={setUrlsInput}
+          onAnalyze={handleScan}
+          isLoading={loading}
+          onImportSuccess={(urls) => {
+            const existing = parseUrlsFromText(urlsInput);
+            const combined = Array.from(new Set([...existing, ...urls]));
+            setUrlsInput(combined.join("\n"));
+          }}
         />
 
         {hasResult && (

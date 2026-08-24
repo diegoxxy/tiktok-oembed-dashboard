@@ -12,25 +12,37 @@ export async function parseImportFile(file: File): Promise<string[]> {
           return;
         }
 
-        // Membaca workbook menggunakan ArrayBuffer/Binary String
-        const workbook = XLSX.read(data, { type: "binary" });
+        // Baca array buffer
+        const workbook = XLSX.read(data, { type: "array" });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
 
-        // Convert isi sheet ke teks mentah
-        const rawText = XLSX.utils.sheet_to_txt(worksheet);
+        // Convert ke JSON Array (semua sel)
+        const jsonRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+        const extractedUrls: string[] = [];
+        
+        // Regex fleksibel untuk menangkap tautan TikTok
+        const tiktokRegex = /https?:\/\/(?:www\.|vt\.|vm\.)?tiktok\.com\/[^\s"',]+/gi;
 
-        // Extract semua URL TikTok menggunakan Regex
-        const tiktokUrlRegex = /https?:\/\/(?:www\.|vt\.|vm\.)?tiktok\.com\/[^\s"',]+/gi;
-        const matches = rawText.match(tiktokUrlRegex) || [];
+        jsonRows.forEach((row) => {
+          if (Array.isArray(row)) {
+            row.forEach((cell) => {
+              if (cell !== undefined && cell !== null) {
+                const cellStr = String(cell).trim();
+                const matches = cellStr.match(tiktokRegex);
+                if (matches) {
+                  matches.forEach((url) => {
+                    // Bersihkan karakter ekstra di ujung URL
+                    const cleanUrl = url.replace(/[;,\)\.]+$ /g, "").trim();
+                    extractedUrls.push(cleanUrl);
+                  });
+                }
+              }
+            });
+          }
+        });
 
-        // Bersihkan trailing punctuation (koma, titik, kurung)
-        const cleanedUrls = matches.map((url) =>
-          url.replace(/[;,\)\.]+$ /g, "").trim()
-        );
-
-        // Hapus duplikat
-        const uniqueUrls = Array.from(new Set(cleanedUrls));
+        const uniqueUrls = Array.from(new Set(extractedUrls));
         resolve(uniqueUrls);
       } catch (err) {
         console.error("Error parsing excel file:", err);
@@ -39,8 +51,8 @@ export async function parseImportFile(file: File): Promise<string[]> {
     };
 
     reader.onerror = (error) => reject(error);
-
-    // Gunakan readAsBinaryString agar kompatibel penuh dengan xlsx & csv
-    reader.readAsBinaryString(file);
+    
+    // Gunakan ArrayBuffer
+    reader.readAsArrayBuffer(file);
   });
 }
