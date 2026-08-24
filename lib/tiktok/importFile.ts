@@ -1,71 +1,46 @@
-"use client";
-
-import Papa from "papaparse";
 import * as XLSX from "xlsx";
 
-// Menangkap URL TikTok dalam bentuk apa pun: tiktok.com/@user/video/123,
-// vt.tiktok.com/xxx, vm.tiktok.com/xxx, dengan atau tanpa query string.
-const TIKTOK_URL_REGEX = /https?:\/\/(?:www\.|vt\.|vm\.|m\.)?tiktok\.com\/\S+/gi;
+export async function parseImportFile(file: File): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
 
-export interface ImportResult {
-  urls: string[];
-  totalCellsScanned: number;
-  duplicatesSkipped: number;
-}
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result;
+        if (!data) {
+          resolve([]);
+          return;
+        }
 
-/**
- * Auto Column Mapping: pindai SEMUA sel di file (tanpa asumsi nama/posisi kolom),
- * lalu ambil apa pun yang match pola URL TikTok. Jadi file dengan header apa pun,
- * atau tanpa header sama sekali, tetap bisa diproses.
- */
-export function extractTikTokUrls(rows: unknown[][]): ImportResult {
-  const found: string[] = [];
-  let totalCellsScanned = 0;
+        // Membaca workbook menggunakan ArrayBuffer/Binary String
+        const workbook = XLSX.read(data, { type: "binary" });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
 
-  for (const row of rows) {
-    for (const cell of row) {
-      if (cell === null || cell === undefined) continue;
-      totalCellsScanned += 1;
-      const cellStr = String(cell);
-      const matches = cellStr.match(TIKTOK_URL_REGEX);
-      if (matches) {
-        for (const m of matches) found.push(m.trim().replace(/[,;]+$/, ""));
+        // Convert isi sheet ke teks mentah
+        const rawText = XLSX.utils.sheet_to_txt(worksheet);
+
+        // Extract semua URL TikTok menggunakan Regex
+        const tiktokUrlRegex = /https?:\/\/(?:www\.|vt\.|vm\.)?tiktok\.com\/[^\s"',]+/gi;
+        const matches = rawText.match(tiktokUrlRegex) || [];
+
+        // Bersihkan trailing punctuation (koma, titik, kurung)
+        const cleanedUrls = matches.map((url) =>
+          url.replace(/[;,\)\.]+$ /g, "").trim()
+        );
+
+        // Hapus duplikat
+        const uniqueUrls = Array.from(new Set(cleanedUrls));
+        resolve(uniqueUrls);
+      } catch (err) {
+        console.error("Error parsing excel file:", err);
+        reject(err);
       }
-    }
-  }
+    };
 
-  const seen = new Set<string>();
-  const urls: string[] = [];
-  let duplicatesSkipped = 0;
-  for (const url of found) {
-    if (seen.has(url)) {
-      duplicatesSkipped += 1;
-      continue;
-    }
-    seen.add(url);
-    urls.push(url);
-  }
+    reader.onerror = (error) => reject(error);
 
-  return { urls, totalCellsScanned, duplicatesSkipped };
-}
-
-export async function parseImportFile(file: File): Promise<ImportResult> {
-  const name = file.name.toLowerCase();
-
-  if (name.endsWith(".csv")) {
-    const text = await file.text();
-    const parsed = Papa.parse<string[]>(text, { skipEmptyLines: true });
-    return extractTikTokUrls(parsed.data as unknown[][]);
-  }
-
-  // .xlsx / .xls — baca semua sheet, gabungkan semua baris.
-  const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(buffer, { type: "array" });
-  const allRows: unknown[][] = [];
-  for (const sheetName of workbook.SheetNames) {
-    const sheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: false });
-    allRows.push(...rows);
-  }
-  return extractTikTokUrls(allRows);
+    // Gunakan readAsBinaryString agar kompatibel penuh dengan xlsx & csv
+    reader.readAsBinaryString(file);
+  });
 }
