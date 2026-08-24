@@ -60,7 +60,6 @@ export default function Home() {
 
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const [error, setError] = useState("");
 
   const [allVideos, setAllVideos] = useState<VideoItem[]>([]);
 
@@ -72,31 +71,10 @@ export default function Home() {
   const [creatorSort, setCreatorSort] = useState<CreatorSortKey>("creator_views_desc");
   const [selectedCreatorName, setSelectedCreatorName] = useState<string | null>(null);
 
-  async function handleImportFile(file: File) {
-    try {
-      const extractedUrls = await parseImportFile(file);
-      if (!extractedUrls || extractedUrls.length === 0) {
-        setImportInfo(`Tidak ada URL TikTok yang ditemukan di file "${file.name}".`);
-        return;
-      }
-      const existing = parseUrlsFromText(urlsInput);
-      const existingSet = new Set(existing);
-      const newOnes = extractedUrls.filter((u: string) => !existingSet.has(u));
-      const merged = [...existing, ...newOnes];
-      setUrlsInput(merged.join("\n"));
-      setImportInfo(
-        `Ditemukan ${extractedUrls.length} URL dari "${file.name}" (${newOnes.length} baru ditambahkan).`
-      );
-    } catch {
-      setImportInfo(`Gagal membaca file "${file.name}". Pastikan formatnya .xlsx, .xls, atau .csv.`);
-    }
-  }
-
   async function handleScan() {
     if (!targetHashtag.trim() || !urlsInput.trim()) return;
 
     setLoading(true);
-    setError("");
     setAllVideos([]);
 
     const cleanHashtag = targetHashtag.replace(/^#/, "").trim();
@@ -192,12 +170,10 @@ export default function Home() {
         </header>
 
         <InputPanel
-          targetHashtag={targetHashtag}
-          setTargetHashtag={setTargetHashtag}
-          onHashtagChange={setTargetHashtag}
+          hashtag={targetHashtag}
+          setHashtag={setTargetHashtag}
           rawUrls={urlsInput}
           setRawUrls={setUrlsInput}
-          onRawUrlsChange={setUrlsInput}
           onAnalyze={handleScan}
           isLoading={loading}
           onImportSuccess={(urls: string[]) => {
