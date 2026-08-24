@@ -4,47 +4,49 @@ import React, { useRef } from "react";
 import { Upload, Play } from "lucide-react";
 import { parseImportFile } from "@/lib/tiktok/importFile";
 
-interface InputPanelProps {
+export interface InputPanelProps {
+  // Dukungan berbagai variasi nama prop dari page.tsx
   hashtag?: string;
+  targetHashtag?: string;
   setHashtag?: (val: string) => void;
+  setTargetHashtag?: (val: string) => void;
   onHashtagChange?: (val: string) => void;
+
   rawUrls?: string;
+  videoUrlsText?: string;
   setRawUrls?: (val: string) => void;
+  setVideoUrlsText?: (val: string) => void;
   onRawUrlsChange?: (val: string) => void;
+
   isLoading?: boolean;
   onAnalyze?: () => void;
   onImportSuccess?: (urls: string[]) => void;
+  
+  // Prop opsional sisa cache
   useCache?: boolean;
   setUseCache?: (val: boolean) => void;
   onUseCacheChange?: (val: boolean) => void;
 }
 
 export const InputPanel: React.FC<InputPanelProps> = (props) => {
-  const {
-    hashtag = "",
-    rawUrls = "",
-    isLoading = false,
-    onAnalyze,
-    onImportSuccess,
-  } = props;
+  const currentHashtag = props.hashtag ?? props.targetHashtag ?? "";
+  const currentUrls = props.rawUrls ?? props.videoUrlsText ?? "";
+  const isLoading = props.isLoading ?? false;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Helper aman: mengecek semua kemungkinan nama fungsi yang dikirim dari page.tsx
+  // Helper update hashtag yang kompatibel ke semua jenis handler
   const handleHashtagChange = (val: string) => {
-    if (typeof props.setHashtag === "function") {
-      props.setHashtag(val);
-    } else if (typeof props.onHashtagChange === "function") {
-      props.onHashtagChange(val);
-    }
+    if (typeof props.setHashtag === "function") props.setHashtag(val);
+    if (typeof props.setTargetHashtag === "function") props.setTargetHashtag(val);
+    if (typeof props.onHashtagChange === "function") props.onHashtagChange(val);
   };
 
+  // Helper update URLs yang kompatibel ke semua jenis handler
   const handleUrlsChange = (val: string) => {
-    if (typeof props.setRawUrls === "function") {
-      props.setRawUrls(val);
-    } else if (typeof props.onRawUrlsChange === "function") {
-      props.onRawUrlsChange(val);
-    }
+    if (typeof props.setRawUrls === "function") props.setRawUrls(val);
+    if (typeof props.setVideoUrlsText === "function") props.setVideoUrlsText(val);
+    if (typeof props.onRawUrlsChange === "function") props.onRawUrlsChange(val);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -53,12 +55,12 @@ export const InputPanel: React.FC<InputPanelProps> = (props) => {
 
     try {
       const extractedUrls = await parseImportFile(file);
-      if (extractedUrls.length === 0) {
+      if (!extractedUrls || extractedUrls.length === 0) {
         alert("Tidak ditemukan URL TikTok valid dalam file tersebut.");
         return;
       }
 
-      const existingUrls = rawUrls
+      const existingUrls = currentUrls
         .split("\n")
         .map((u) => u.trim())
         .filter(Boolean);
@@ -66,8 +68,8 @@ export const InputPanel: React.FC<InputPanelProps> = (props) => {
       const combined = Array.from(new Set([...existingUrls, ...extractedUrls]));
       handleUrlsChange(combined.join("\n"));
 
-      if (onImportSuccess) {
-        onImportSuccess(extractedUrls);
+      if (props.onImportSuccess) {
+        props.onImportSuccess(extractedUrls);
       }
     } catch {
       alert("Gagal membaca file. Pastikan format file adalah .xlsx atau .csv");
@@ -85,7 +87,7 @@ export const InputPanel: React.FC<InputPanelProps> = (props) => {
         </label>
         <input
           type="text"
-          value={hashtag}
+          value={currentHashtag}
           onChange={(e) => handleHashtagChange(e.target.value)}
           placeholder="Contoh: BertamuSpecial"
           className="w-full bg-[#0B0F19] border border-[#1E293B] rounded-lg px-4 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
@@ -118,7 +120,7 @@ export const InputPanel: React.FC<InputPanelProps> = (props) => {
         </div>
         <textarea
           rows={6}
-          value={rawUrls}
+          value={currentUrls}
           onChange={(e) => handleUrlsChange(e.target.value)}
           placeholder="https://www.tiktok.com/@username/video/123456789&#10;https://vt.tiktok.com/ZSXXXXXX/"
           className="w-full bg-[#0B0F19] border border-[#1E293B] rounded-lg p-4 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition-colors resize-y"
@@ -128,8 +130,8 @@ export const InputPanel: React.FC<InputPanelProps> = (props) => {
       {/* Submit Button */}
       <button
         type="button"
-        disabled={isLoading || !hashtag || !rawUrls.trim()}
-        onClick={onAnalyze}
+        disabled={isLoading || !currentHashtag || !currentUrls.trim()}
+        onClick={props.onAnalyze}
         className="w-full bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-white font-semibold py-3.5 px-6 rounded-lg flex items-center justify-center gap-2 transition-all shadow-lg shadow-cyan-950/50"
       >
         <Play className="w-4 h-4 fill-current" />
