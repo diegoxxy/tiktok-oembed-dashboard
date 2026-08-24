@@ -8,10 +8,11 @@ export function chunkArray<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
- * Jalankan sekumpulan chunk lewat `worker` dengan concurrency terbatas,
- * memanggil `onChunkDone` progresif setiap satu chunk selesai (sukses/gagal)
- * supaya UI bisa update secara streaming, bukan menunggu semuanya selesai.
+ * Jalankan sekumpulan chunk secara teratur dengan jeda waktu antar batch
+ * untuk menjaga pengambilan data tetap real-time tanpa memicu rate-limit API.
  */
 export async function runChunksWithConcurrency<TChunk, TResult>(
   chunks: TChunk[],
@@ -30,6 +31,10 @@ export async function runChunksWithConcurrency<TChunk, TResult>(
         onChunkDone?.(result, currentIndex, null);
       } catch (err) {
         onChunkDone?.(null, currentIndex, err);
+      }
+      // Jeda 1 detik antar chunk batch
+      if (nextIndex < chunks.length) {
+        await delay(1000);
       }
     }
   }
