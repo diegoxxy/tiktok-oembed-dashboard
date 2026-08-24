@@ -14,35 +14,37 @@ interface InputPanelProps {
   isLoading?: boolean;
   onAnalyze?: () => void;
   onImportSuccess?: (urls: string[]) => void;
-  // Fallback opsional untuk me-bypass prop cache lama dari page.tsx
   useCache?: boolean;
   setUseCache?: (val: boolean) => void;
   onUseCacheChange?: (val: boolean) => void;
 }
 
-export const InputPanel: React.FC<InputPanelProps> = ({
-  hashtag = "",
-  setHashtag,
-  onHashtagChange,
-  rawUrls = "",
-  setRawUrls,
-  onRawUrlsChange,
-  isLoading = false,
-  onAnalyze,
-  onImportSuccess,
-}) => {
+export const InputPanel: React.FC<InputPanelProps> = (props) => {
+  const {
+    hashtag = "",
+    rawUrls = "",
+    isLoading = false,
+    onAnalyze,
+    onImportSuccess,
+  } = props;
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Helper untuk update hashtag secara aman tanpa peduli nama prop yang dikirim page.tsx
+  // Helper aman: mengecek semua kemungkinan nama fungsi yang dikirim dari page.tsx
   const handleHashtagChange = (val: string) => {
-    if (setHashtag) setHashtag(val);
-    if (onHashtagChange) onHashtagChange(val);
+    if (typeof props.setHashtag === "function") {
+      props.setHashtag(val);
+    } else if (typeof props.onHashtagChange === "function") {
+      props.onHashtagChange(val);
+    }
   };
 
-  // Helper untuk update rawUrls secara aman
   const handleUrlsChange = (val: string) => {
-    if (setRawUrls) setRawUrls(val);
-    if (onRawUrlsChange) onRawUrlsChange(val);
+    if (typeof props.setRawUrls === "function") {
+      props.setRawUrls(val);
+    } else if (typeof props.onRawUrlsChange === "function") {
+      props.onRawUrlsChange(val);
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
