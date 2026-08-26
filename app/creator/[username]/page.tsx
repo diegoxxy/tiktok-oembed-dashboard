@@ -4,14 +4,24 @@ import { use, useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import type { VideoItem } from "@/lib/tiktok/types";
 import { formatCompactViews, formatFullNumber } from "@/lib/tiktok/format";
-import { Eye, Heart, MessageSquare, Share2, Bookmark, ArrowLeft, ExternalLink } from "lucide-react";
+import {
+  Eye,
+  Heart,
+  MessageSquare,
+  Share2,
+  Bookmark,
+  ArrowLeft,
+  ExternalLink,
+  AlertTriangle,
+} from "lucide-react";
 
 export default function CreatorDetailPage({ params }: { params: Promise<{ username: string }> }) {
   const resolvedParams = use(params);
-  
+
   // Normalisasi username: Dekode URI & bersihkan awalan '@'
   const rawUsername = decodeURIComponent(resolvedParams.username);
   const cleanUsername = rawUsername.replace(/^@/, "").trim();
+  const isUnknownPage = cleanUsername.toLowerCase() === "unknown";
 
   const [allVideos, setAllVideos] = useState<VideoItem[]>([]);
 
@@ -30,16 +40,23 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
     }
   }, []);
 
-  // Filter video khusus username ini (abaikan '@' dan case-insensitive)
+  // Filter video khusus username ini atau semua video error jika halaman unknown
   const creatorVideos = useMemo(() => {
     return allVideos.filter((v) => {
       const author = (v.authorName || "").replace(/^@/, "").trim().toLowerCase();
+      if (isUnknownPage) {
+        return author === "unknown" || v.status === "error";
+      }
       return author === cleanUsername.toLowerCase();
     });
-  }, [allVideos, cleanUsername]);
+  }, [allVideos, cleanUsername, isUnknownPage]);
 
   // Deteksi Platform Kreator Utama & URL Profil
   const primaryPlatform = useMemo(() => {
+    if (isUnknownPage) {
+      return { name: "System Error", profileUrl: null };
+    }
+
     const firstVideo = creatorVideos[0];
     if (!firstVideo) {
       return {
@@ -62,7 +79,7 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
           ? `https://www.youtube.com/@${cleanUsername}`
           : `https://www.tiktok.com/@${cleanUsername}`),
     };
-  }, [creatorVideos, cleanUsername]);
+  }, [creatorVideos, cleanUsername, isUnknownPage]);
 
   // Hitung total engagement per kreator
   const stats = useMemo(() => {
@@ -90,10 +107,24 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
         </Link>
 
         {/* Header Profil Kreator */}
-        <div className="bg-[#131b2e] border border-[#1e293b] p-6 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
+        <div
+          className={`border p-6 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl ${
+            isUnknownPage
+              ? "bg-amber-950/20 border-amber-800/40"
+              : "bg-[#131b2e] border-[#1e293b]"
+          }`}
+        >
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-slate-800 border-2 border-cyan-500/40 flex items-center justify-center text-xl font-bold text-cyan-400 overflow-hidden shrink-0">
-              {creatorVideos[0]?.authorAvatar ? (
+            <div
+              className={`w-16 h-16 rounded-full border-2 flex items-center justify-center text-xl font-bold shrink-0 overflow-hidden ${
+                isUnknownPage
+                  ? "bg-amber-900/30 border-amber-500 text-amber-400"
+                  : "bg-slate-800 border-cyan-500/40 text-cyan-400"
+              }`}
+            >
+              {isUnknownPage ? (
+                <AlertTriangle className="w-8 h-8 text-amber-400" />
+              ) : creatorVideos[0]?.authorAvatar ? (
                 <img
                   src={creatorVideos[0].authorAvatar}
                   alt={cleanUsername}
@@ -104,53 +135,82 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
               )}
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-white">@{cleanUsername}</h1>
+              <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+                {isUnknownPage ? "⚠️ Link Error / Unknown" : `@${cleanUsername}`}
+              </h1>
               <p className="text-sm text-slate-400 mt-0.5">
-                Total Submissions: <strong className="text-white">{creatorVideos.length} Video</strong>
+                Total Link Bermasalah:{" "}
+                <strong className={isUnknownPage ? "text-amber-400" : "text-white"}>
+                  {creatorVideos.length} Video
+                </strong>
               </p>
             </div>
           </div>
 
-          <a
-            href={primaryPlatform.profileUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold text-sm rounded-xl transition"
-          >
-            Buka Profil {primaryPlatform.name} <ExternalLink className="w-4 h-4" />
-          </a>
+          {!isUnknownPage && primaryPlatform.profileUrl && (
+            <a
+              href={primaryPlatform.profileUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold text-sm rounded-xl transition"
+            >
+              Buka Profil {primaryPlatform.name} <ExternalLink className="w-4 h-4" />
+            </a>
+          )}
         </div>
 
         {/* Ringkasan Engagement Kreator */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <div className="bg-[#131b2e] border border-[#1e293b] p-4 rounded-xl">
-            <span className="text-xs text-slate-400 flex items-center gap-1"><Eye className="w-3.5 h-3.5" /> VIEWS</span>
-            <p className="text-xl font-bold text-amber-400 mt-1">{formatCompactViews(stats.views)}</p>
+            <span className="text-xs text-slate-400 flex items-center gap-1">
+              <Eye className="w-3.5 h-3.5" /> VIEWS
+            </span>
+            <p className="text-xl font-bold text-amber-400 mt-1">
+              {formatCompactViews(stats.views)}
+            </p>
           </div>
           <div className="bg-[#131b2e] border border-[#1e293b] p-4 rounded-xl">
-            <span className="text-xs text-slate-400 flex items-center gap-1"><Heart className="w-3.5 h-3.5 text-rose-400" /> LIKES</span>
-            <p className="text-xl font-bold text-rose-400 mt-1">{formatCompactViews(stats.likes)}</p>
+            <span className="text-xs text-slate-400 flex items-center gap-1">
+              <Heart className="w-3.5 h-3.5 text-rose-400" /> LIKES
+            </span>
+            <p className="text-xl font-bold text-rose-400 mt-1">
+              {formatCompactViews(stats.likes)}
+            </p>
           </div>
           <div className="bg-[#131b2e] border border-[#1e293b] p-4 rounded-xl">
-            <span className="text-xs text-slate-400 flex items-center gap-1"><MessageSquare className="w-3.5 h-3.5 text-blue-400" /> COMMENTS</span>
-            <p className="text-xl font-bold text-blue-400 mt-1">{formatCompactViews(stats.comments)}</p>
+            <span className="text-xs text-slate-400 flex items-center gap-1">
+              <MessageSquare className="w-3.5 h-3.5 text-blue-400" /> COMMENTS
+            </span>
+            <p className="text-xl font-bold text-blue-400 mt-1">
+              {formatCompactViews(stats.comments)}
+            </p>
           </div>
           <div className="bg-[#131b2e] border border-[#1e293b] p-4 rounded-xl">
-            <span className="text-xs text-slate-400 flex items-center gap-1"><Share2 className="w-3.5 h-3.5 text-purple-400" /> SHARES</span>
-            <p className="text-xl font-bold text-purple-400 mt-1">{formatCompactViews(stats.shares)}</p>
+            <span className="text-xs text-slate-400 flex items-center gap-1">
+              <Share2 className="w-3.5 h-3.5 text-purple-400" /> SHARES
+            </span>
+            <p className="text-xl font-bold text-purple-400 mt-1">
+              {formatCompactViews(stats.shares)}
+            </p>
           </div>
           <div className="bg-[#131b2e] border border-[#1e293b] p-4 rounded-xl col-span-2 sm:col-span-1">
-            <span className="text-xs text-slate-400 flex items-center gap-1"><Bookmark className="w-3.5 h-3.5 text-emerald-400" /> SAVES</span>
-            <p className="text-xl font-bold text-emerald-400 mt-1">{formatCompactViews(stats.saves)}</p>
+            <span className="text-xs text-slate-400 flex items-center gap-1">
+              <Bookmark className="w-3.5 h-3.5 text-emerald-400" /> SAVES
+            </span>
+            <p className="text-xl font-bold text-emerald-400 mt-1">
+              {formatCompactViews(stats.saves)}
+            </p>
           </div>
         </div>
 
         {/* Daftar Video */}
-        <h2 className="text-lg font-bold text-white pt-2">Daftar Video ({creatorVideos.length})</h2>
+        <h2 className="text-lg font-bold text-white pt-2">
+          Daftar Link Video ({creatorVideos.length})
+        </h2>
 
         {creatorVideos.length === 0 ? (
           <div className="bg-[#131b2e] border border-[#1e293b] p-8 rounded-xl text-center text-slate-400">
-            Data video tidak ditemukan untuk kreator ini. Silakan lakukan **Scan** ulang pada halaman utama.
+            Data video tidak ditemukan. Silakan lakukan **Scan** ulang pada halaman utama.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -170,20 +230,19 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
                   {/* Thumbnail / Cover */}
                   <div className="w-28 h-40 bg-slate-900 rounded-lg overflow-hidden shrink-0 border border-slate-800 relative">
                     {video.coverUrl ? (
-                      <img src={video.coverUrl} alt={video.title || "Video"} className="w-full h-full object-cover" />
+                      <img
+                        src={video.coverUrl}
+                        alt={video.title || "Video"}
+                        className="w-full h-full object-cover"
+                      />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-xs text-slate-600 p-2 text-center">
-                        No Cover
+                      <div className="w-full h-full flex flex-col items-center justify-center text-xs text-amber-500/70 p-2 text-center bg-amber-950/20">
+                        <AlertTriangle className="w-6 h-6 mb-1 text-amber-400" />
+                        Gagal Load
                       </div>
                     )}
-                    <span
-                      className={`absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded capitalize ${
-                        video.status === "qualified"
-                          ? "bg-emerald-500/90 text-white"
-                          : "bg-rose-500/90 text-white"
-                      }`}
-                    >
-                      {video.status || "Unqualified"}
+                    <span className="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded capitalize bg-rose-500/90 text-white">
+                      {video.status || "Error"}
                     </span>
                   </div>
 
@@ -194,18 +253,31 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
                         {video.title || "Gagal Memuat Video (Private / Dihapus / Typo)"}
                       </p>
                       {video.errorMessage && (
-                        <p className="text-[11px] text-rose-400 mt-1">{video.errorMessage}</p>
+                        <p className="text-[11px] text-rose-400 mt-1 font-mono bg-rose-950/30 p-1.5 rounded border border-rose-900/40">
+                          {video.errorMessage}
+                        </p>
                       )}
                       <p className="text-xs text-slate-400 mt-1">
-                        Diposting: {video.postedAt || "-"}
+                        Original Link:{" "}
+                        <span className="text-slate-300 font-mono text-[10px] truncate block">
+                          {video.sourceUrl}
+                        </span>
                       </p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 text-xs py-2 border-y border-slate-800/80 my-2">
-                      <span className="text-amber-400 font-semibold">👁 {formatFullNumber(video.views)}</span>
-                      <span className="text-rose-400 font-semibold">❤️ {formatFullNumber(video.likes)}</span>
-                      <span className="text-blue-400 font-semibold">💬 {formatFullNumber(video.comments)}</span>
-                      <span className="text-purple-400 font-semibold">🔁 {formatFullNumber(video.shares)}</span>
+                      <span className="text-amber-400 font-semibold">
+                        👁 {formatFullNumber(video.views)}
+                      </span>
+                      <span className="text-rose-400 font-semibold">
+                        ❤️ {formatFullNumber(video.likes)}
+                      </span>
+                      <span className="text-blue-400 font-semibold">
+                        💬 {formatFullNumber(video.comments)}
+                      </span>
+                      <span className="text-purple-400 font-semibold">
+                        🔁 {formatFullNumber(video.shares)}
+                      </span>
                     </div>
 
                     {/* Tombol Tonton Dinamis Sesuai Platform */}
@@ -215,11 +287,11 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
                       rel="noreferrer"
                       className={`inline-flex items-center justify-center gap-1.5 text-xs py-2 px-3 rounded-lg font-medium transition ${
                         isYouTube
-                          ? "bg-red-950/40 text-red-400 border border-red-800/50 hover:bg-red-900/50 hover:border-red-500/50"
-                          : "bg-cyan-950/40 text-cyan-400 border border-cyan-800/50 hover:bg-cyan-900/50 hover:border-cyan-500/50"
+                          ? "bg-red-950/40 text-red-400 border border-red-800/50 hover:bg-red-900/50"
+                          : "bg-cyan-950/40 text-cyan-400 border border-cyan-800/50 hover:bg-cyan-900/50"
                       }`}
                     >
-                      Tonton di {platformName} <ExternalLink className="w-3.5 h-3.5" />
+                      Buka Link Asli <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   </div>
                 </div>

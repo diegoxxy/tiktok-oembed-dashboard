@@ -43,7 +43,7 @@ function makeErrorVideo(sourceUrl: string, message: string): VideoItem {
     platform: isYouTube ? "youtube" : "tiktok",
     sourceUrl,
     videoUrl: sourceUrl,
-    title: "Gagal Memuat Video (Private / Limit API / Typo)",
+    title: "Gagal Memuat Video (Private / Shortlink Blocked / Typo)",
     authorName: "unknown",
     authorDisplayName: "Unknown / Error",
     authorUrl: "",
@@ -100,7 +100,8 @@ export default function Home() {
     const cleanHashtag = targetHashtag.replace(/^#/, "").trim();
     const urls = parseUrlsFromText(urlsInput);
 
-    const chunks = chunkArray(urls, 10);
+    // Split per 5 link untuk menghindari rate-limit berlebih pada vt.tiktok.com
+    const chunks = chunkArray(urls, 5);
     const toCache: { sourceUrl: string; video: VideoItem }[] = [];
     const collectedVideos: VideoItem[] = [];
 
@@ -110,7 +111,7 @@ export default function Home() {
       const chunk = chunks[chunkIndex];
 
       if (chunkIndex > 0) {
-        await delay(1200);
+        await delay(1500);
       }
 
       try {
@@ -176,11 +177,33 @@ export default function Home() {
     [filteredVideos, videoSort]
   );
 
-  // Folder @unknown tetap dimasukkan agar dapat diakses oleh user
-  const creatorsForFolder = useMemo(
-    () => sortCreators(groupVideosByCreator(filteredVideos), creatorSort),
-    [filteredVideos, creatorSort]
-  );
+  // Menyusun folder kreator dan menjamin folder `@unknown` SELALU ditampilkan
+  const creatorsForFolder = useMemo(() => {
+    const grouped = groupVideosByCreator(filteredVideos);
+    const sorted = sortCreators(grouped, creatorSort);
+
+    // Cek apakah ada video error / unknown
+    const unknownGroup = grouped.find(
+      (c) => c.authorName.toLowerCase() === "unknown"
+    );
+
+    // Pisahkan kreator valid dan paksa unknown di urutan pertama jika ada
+    const validCreators = sorted.filter(
+      (c) => c.authorName.toLowerCase() !== "unknown"
+    );
+
+    if (unknownGroup) {
+      return [
+        {
+          ...unknownGroup,
+          authorDisplayName: "⚠️ Link Error / Unknown",
+        },
+        ...validCreators,
+      ];
+    }
+
+    return validCreators;
+  }, [filteredVideos, creatorSort]);
 
   const hasResult = allVideos.length > 0;
   const errorCount = useMemo(
@@ -247,7 +270,7 @@ export default function Home() {
                 <div>
                   <strong className="font-semibold text-amber-200">Perhatian:</strong> Ditemukan{" "}
                   <span className="font-bold underline">{errorCount} link video error/unknown</span>.
-                  Kemungkinan karena link typo, video private, atau rate-limit API.
+                  Klik folder **@unknown** di bawah untuk melihat rincian link yang gagal.
                 </div>
               </div>
             )}

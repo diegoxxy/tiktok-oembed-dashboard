@@ -31,7 +31,12 @@ function sanitizeAndNormalizeUrl(url: string): { cleanUrl: string; videoId: stri
   const videoId = tiktokIdMatch ? tiktokIdMatch[1] : null;
 
   // Jika terdapat Video ID, buat URL canonical netral untuk menghindari error typo username
-  if (videoId && (cleaned.includes("tiktok.com") || cleaned.includes("vm.tiktok.com") || cleaned.includes("vt.tiktok.com"))) {
+  if (
+    videoId &&
+    (cleaned.includes("tiktok.com") ||
+      cleaned.includes("vm.tiktok.com") ||
+      cleaned.includes("vt.tiktok.com"))
+  ) {
     cleaned = `https://www.tiktok.com/@tiktok/video/${videoId}`;
   }
 
@@ -39,33 +44,39 @@ function sanitizeAndNormalizeUrl(url: string): { cleanUrl: string; videoId: stri
 }
 
 /**
- * Resolve URL pendek (vt.tiktok.com / vm.tiktok.com)
+ * Resolve URL pendek (vt.tiktok.com / vm.tiktok.com) secara mendalam
  */
 async function resolveTikTokUrl(url: string): Promise<string> {
-  const { cleanUrl } = sanitizeAndNormalizeUrl(url);
-  if (!cleanUrl) return "";
+  const trimmedUrl = url.trim();
+  if (!trimmedUrl) return "";
 
-  if (cleanUrl.includes("vt.tiktok.com") || cleanUrl.includes("vm.tiktok.com")) {
+  // Jika URL berupa shortlink vt/vm.tiktok.com
+  if (trimmedUrl.includes("vt.tiktok.com") || trimmedUrl.includes("vm.tiktok.com")) {
     try {
-      const response = await fetch(cleanUrl, {
+      const response = await fetch(trimmedUrl, {
         method: "GET",
         redirect: "follow",
         cache: "no-store",
         headers: {
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webkit,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
         },
       });
-      if (response.url) {
+
+      if (response.url && !response.url.includes("vt.tiktok.com")) {
         const resolved = sanitizeAndNormalizeUrl(response.url);
         return resolved.cleanUrl;
       }
-      return cleanUrl;
-    } catch {
-      return cleanUrl;
+    } catch (err) {
+      console.error(`Gagal resolve shortlink: ${trimmedUrl}`, err);
     }
   }
-  return cleanUrl;
+
+  const normalized = sanitizeAndNormalizeUrl(trimmedUrl);
+  return normalized.cleanUrl;
 }
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -99,14 +110,17 @@ export async function POST(request: Request) {
       const originalInputUrl = videoUrls[i].trim();
       if (!originalInputUrl) continue;
 
-      const isYouTube = originalInputUrl.includes("youtube.com") || originalInputUrl.includes("youtu.be");
-      let videoData: VideoItem;
+      const isYouTube =
+        originalInputUrl.includes("youtube.com") || originalInputUrl.includes("youtu.be");
+      let videoData: VideoItem | null = null;
 
       try {
         if (isYouTube) {
           const { cleanUrl } = sanitizeAndNormalizeUrl(originalInputUrl);
           videoData = await fetchYouTubeData(cleanUrl, cleanHashtag);
-          videoData.sourceUrl = originalInputUrl;
+          if (videoData) {
+            videoData.sourceUrl = originalInputUrl;
+          }
         } else {
           const resolvedUrl = await resolveTikTokUrl(originalInputUrl);
           videoData = await fetchTikTokDataWithRetry(resolvedUrl, cleanHashtag);
@@ -115,16 +129,17 @@ export async function POST(request: Request) {
             videoData.platform = "tiktok";
             videoData.sourceUrl = originalInputUrl;
           } else {
-            throw new Error("Data video kosong / Private");
+            throw new Error("Data video kosong / Private / Terblokir Rate Limit");
           }
         }
       } catch (err) {
+        // Fallback untuk error video (masuk ke kategori unknown/error)
         videoData = {
           id: originalInputUrl,
           platform: isYouTube ? "youtube" : "tiktok",
           sourceUrl: originalInputUrl,
           videoUrl: originalInputUrl,
-          title: "Gagal Memuat Video (Private / Typo / Limit)",
+          title: "Gagal Memuat Video (Private / Shortlink Error / Limit API)",
           authorName: "unknown",
           authorDisplayName: "Unknown / Error",
           authorUrl: "",
@@ -141,10 +156,13 @@ export async function POST(request: Request) {
         };
       }
 
-      videos.push(videoData);
+      if (videoData) {
+        videos.push(videoData);
+      }
 
+      // Jeda antarektraksi untuk mencegah rate limit dari TikTok/YouTube
       if (i < videoUrls.length - 1) {
-        await delay(250);
+        await delay(500);
       }
     }
 
