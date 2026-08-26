@@ -106,7 +106,7 @@ export default function CreatorDrawer({
                       )}
                     </div>
                     <a
-                      href={vid.videoUrl}
+                      href={vid.sourceUrl || vid.videoUrl}
                       target="_blank"
                       rel="noreferrer"
                       className="mt-2 text-center text-xs text-cyan-400 hover:text-cyan-300 font-medium py-1.5 bg-slate-900/80 rounded border border-slate-800 hover:border-cyan-900/50 transition-colors"

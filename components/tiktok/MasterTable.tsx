@@ -83,7 +83,7 @@ export default function MasterTable({ videos }: { videos: VideoItem[] }) {
                   <StatusBadge status={vid.status} />
                 </span>
                 <a
-                  href={vid.videoUrl}
+                  href={vid.sourceUrl || vid.videoUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center justify-end gap-1 text-xs text-slate-400 hover:text-cyan-400 transition-colors"
