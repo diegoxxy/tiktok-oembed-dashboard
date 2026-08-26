@@ -76,10 +76,9 @@ export default function Home() {
   const [creatorSort, setCreatorSort] = useState<CreatorSortKey>("creator_views_desc");
   const [selectedCreatorName, setSelectedCreatorName] = useState<string | null>(null);
 
+  // Load hanya hasil scan terakhir (jika ada), TANPA auto-fill form input hashtag/URL
   useEffect(() => {
     const cachedVideos = localStorage.getItem("tiktok_analytics_last_scan");
-    const cachedHashtag = localStorage.getItem("tiktok_analytics_last_hashtag");
-    const cachedUrls = localStorage.getItem("tiktok_analytics_last_urls");
 
     if (cachedVideos) {
       try {
@@ -91,8 +90,6 @@ export default function Home() {
         console.error("Gagal memuat cache dashboard:", e);
       }
     }
-    if (cachedHashtag) setTargetHashtag(cachedHashtag);
-    if (cachedUrls) setUrlsInput(cachedUrls);
   }, []);
 
   async function handleScan() {
@@ -103,9 +100,6 @@ export default function Home() {
 
     const cleanHashtag = targetHashtag.replace(/^#/, "").trim();
     const urls = parseUrlsFromText(urlsInput);
-
-    localStorage.setItem("tiktok_analytics_last_hashtag", targetHashtag);
-    localStorage.setItem("tiktok_analytics_last_urls", urlsInput);
 
     const chunks = chunkArray(urls, 10);
     const toCache: { sourceUrl: string; video: VideoItem }[] = [];
@@ -133,8 +127,9 @@ export default function Home() {
           collectedVideos.push(...data.videos);
           toCache.push(...data.videos.map((v) => ({ sourceUrl: v.sourceUrl, video: v })));
         }
-      } catch (err: any) {
-        const errored = chunk.map((u: string) => makeErrorVideo(u, err.message || "Gagal menghubungi server"));
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : "Gagal menghubungi server";
+        const errored = chunk.map((u: string) => makeErrorVideo(u, errorMessage));
         setAllVideos((prev) => [...prev, ...errored]);
         collectedVideos.push(...errored);
       }
@@ -150,6 +145,15 @@ export default function Home() {
 
     setLoading(false);
     setProgress(null);
+  }
+
+  function handleReset() {
+    setAllVideos([]);
+    setTargetHashtag("");
+    setUrlsInput("");
+    localStorage.removeItem("tiktok_analytics_last_scan");
+    localStorage.removeItem("tiktok_analytics_last_hashtag");
+    localStorage.removeItem("tiktok_analytics_last_urls");
   }
 
   const globalMetrics = useMemo(() => computeGlobalMetrics(allVideos), [allVideos]);
@@ -199,6 +203,14 @@ export default function Home() {
               Verifikasi, agregasi, dan analisis performa kampanye multi-platform.
             </p>
           </div>
+          {hasResult && (
+            <button
+              onClick={handleReset}
+              className="px-4 py-2 bg-rose-600/20 text-rose-400 hover:bg-rose-600/30 border border-rose-500/30 rounded-lg text-xs font-semibold transition-colors self-start md:self-auto"
+            >
+              Reset / Reset Analisis
+            </button>
+          )}
         </header>
 
         <InputPanel
