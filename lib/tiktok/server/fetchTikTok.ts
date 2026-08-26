@@ -1,11 +1,26 @@
 import type { VideoItem } from "@/lib/tiktok/types";
 
+/**
+ * Mengekstrak Video ID 19 digit dari URL TikTok untuk penanganan typo path/username
+ */
+export function extractTikTokVideoId(url: string): string | null {
+  const match = url.match(/\/video\/(\d+)/i);
+  return match ? match[1] : null;
+}
+
 export async function fetchTikTokDataWithRetry(
   resolvedUrl: string,
   cleanHashtag: string
 ): Promise<VideoItem> {
+  const videoId = extractTikTokVideoId(resolvedUrl);
+
+  // Jika URL memiliki ID video 19 digit, buat URL netral untuk memutus error typo username (@berframa vs @ber1rama)
+  const canonicalUrl = videoId
+    ? `https://www.tiktok.com/@tiktok/video/${videoId}`
+    : resolvedUrl;
+
   try {
-    const apiUrl = `https://www.tikwm.com/api/?url=${encodeURIComponent(resolvedUrl)}`;
+    const apiUrl = `https://www.tikwm.com/api/?url=${encodeURIComponent(canonicalUrl)}`;
     const res = await fetch(apiUrl, {
       headers: {
         "User-Agent":
@@ -24,8 +39,6 @@ export async function fetchTikTokDataWithRetry(
     }
 
     const data = json.data;
-    const titleText = (data.title || "").toLowerCase();
-    const isHashtagMatch = titleText.includes(`#${cleanHashtag}`);
 
     let formattedDate = "-";
     if (data.create_time) {
@@ -37,15 +50,17 @@ export async function fetchTikTokDataWithRetry(
       });
     }
 
+    const authorUniqueId = data.author?.unique_id || "unknown";
+
     return {
-      id: data.id || resolvedUrl,
-      platform: "tiktok", // Tambahkan platform marker
-      sourceUrl: resolvedUrl,
-      videoUrl: data.play || resolvedUrl,
+      id: data.id || videoId || resolvedUrl,
+      platform: "tiktok",
+      sourceUrl: resolvedUrl, // Pertahankan input awal user
+      videoUrl: canonicalUrl,
       title: data.title || "",
-      authorName: data.author?.unique_id || "unknown",
-      authorDisplayName: data.author?.nickname || "unknown",
-      authorUrl: `https://www.tiktok.com/@${data.author?.unique_id || ""}`,
+      authorName: authorUniqueId.startsWith("@") ? authorUniqueId : `@${authorUniqueId}`,
+      authorDisplayName: data.author?.nickname || authorUniqueId,
+      authorUrl: `https://www.tiktok.com/@${authorUniqueId.replace(/^@/, "")}`,
       authorAvatar: data.author?.avatar || "",
       coverUrl: data.cover || "",
       views: Number(data.play_count || 0),
@@ -54,7 +69,7 @@ export async function fetchTikTokDataWithRetry(
       shares: Number(data.share_count || 0),
       saves: Number(data.collect_count || 0),
       postedAt: formattedDate,
-      status: isHashtagMatch ? "qualified" : "unqualified",
+      status: "qualified", // Otomatis diset QUALIFIED untuk semua video valid
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Gagal mengambil data";
@@ -65,10 +80,10 @@ export async function fetchTikTokDataWithRetry(
 function makeErrorVideo(sourceUrl: string, message: string): VideoItem {
   return {
     id: sourceUrl,
-    platform: "tiktok", // Tambahkan platform marker
+    platform: "tiktok",
     sourceUrl,
     videoUrl: sourceUrl,
-    title: "",
+    title: "Gagal Memuat Video (Private / Dihapus / Typo)",
     authorName: "unknown",
     authorDisplayName: "unknown",
     authorUrl: "",

@@ -17,7 +17,7 @@ export async function fetchYouTubeData(
 
   const embedUrl = `https://www.youtube.com/shorts/${videoId}`;
 
-  // 1. Coba ambil data via Invidious API (Gratis + Metrik Engagement)
+  // 1. Coba ambil data via Invidious API
   try {
     const invidiousRes = await fetch(`https://inv.tux.pizza/api/v1/videos/${videoId}`, {
       cache: "no-store",
@@ -26,8 +26,6 @@ export async function fetchYouTubeData(
 
     if (invidiousRes.ok) {
       const data = await invidiousRes.json();
-      const titleText = `${data.title || ""} ${data.description || ""}`.toLowerCase();
-      const isHashtagMatch = cleanHashtag ? titleText.includes(cleanHashtag.toLowerCase()) : true;
 
       let formattedDate = "-";
       if (data.published) {
@@ -41,6 +39,7 @@ export async function fetchYouTubeData(
 
       const rawAuthor = data.author || "unknown";
       const cleanAuthor = rawAuthor.replace(/\s+/g, "").toLowerCase();
+      const formattedAuthor = cleanAuthor.startsWith("@") ? cleanAuthor : `@${cleanAuthor}`;
 
       return {
         id: videoId,
@@ -48,7 +47,7 @@ export async function fetchYouTubeData(
         sourceUrl: resolvedUrl,
         videoUrl: embedUrl,
         title: data.title || "",
-        authorName: cleanAuthor,
+        authorName: formattedAuthor,
         authorDisplayName: rawAuthor,
         authorUrl: data.authorUrl ? `https://www.youtube.com${data.authorUrl}` : "",
         authorAvatar: data.authorThumbnails?.[0]?.url || "",
@@ -59,16 +58,15 @@ export async function fetchYouTubeData(
         shares: 0,
         saves: 0,
         postedAt: formattedDate,
-        status: isHashtagMatch ? "qualified" : "unqualified",
+        status: "qualified", // Otomatis diset QUALIFIED
       };
     }
   } catch {
-    // Lanjut ke fallback oEmbed + Scraper jika Invidious gagal
+    // Lanjut ke fallback oEmbed jika Invidious tidak merespons
   }
 
   // 2. Fallback: oEmbed + Direct HTML Scraper Meta Tags
   try {
-    // Fetch Metadata dari oEmbed YouTube Official
     const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(resolvedUrl)}&format=json`;
     const res = await fetch(oembedUrl, { cache: "no-store" });
 
@@ -79,8 +77,8 @@ export async function fetchYouTubeData(
     const oembedData = await res.json();
     const rawAuthor = oembedData.author_name || "youtube_creator";
     const cleanAuthor = rawAuthor.replace(/\s+/g, "").toLowerCase();
+    const formattedAuthor = cleanAuthor.startsWith("@") ? cleanAuthor : `@${cleanAuthor}`;
 
-    // Fetch HTML Halaman Shorts untuk Ekstraksi Views & Likes dari Meta Tag / Microdata
     let views = 0;
     let likes = 0;
 
@@ -97,7 +95,6 @@ export async function fetchYouTubeData(
       if (pageRes.ok) {
         const html = await pageRes.text();
 
-        // Extract Views (via regex meta tag / json-ld)
         const viewMatch =
           html.match(/"viewCount":"(\d+)"/) ||
           html.match(/itemprop="interactionCount" content="(\d+)"/) ||
@@ -107,7 +104,6 @@ export async function fetchYouTubeData(
           views = parseInt(viewMatch[1].replace(/[^\d]/g, ""), 10) || 0;
         }
 
-        // Extract Likes (via regex metadata label)
         const likeMatch =
           html.match(/"label":"([\d,\.]+)\s+likes"/i) ||
           html.match(/"likeCount":"(\d+)"/);
@@ -117,11 +113,8 @@ export async function fetchYouTubeData(
         }
       }
     } catch {
-      // Abaikan error scraping jika diblokir
+      // Abaikan error parsing HTML
     }
-
-    const titleText = (oembedData.title || "").toLowerCase();
-    const isHashtagMatch = cleanHashtag ? titleText.includes(cleanHashtag.toLowerCase()) : true;
 
     return {
       id: videoId,
@@ -129,7 +122,7 @@ export async function fetchYouTubeData(
       sourceUrl: resolvedUrl,
       videoUrl: embedUrl,
       title: oembedData.title || "",
-      authorName: cleanAuthor,
+      authorName: formattedAuthor,
       authorDisplayName: rawAuthor,
       authorUrl: oembedData.author_url || "",
       authorAvatar: oembedData.thumbnail_url || "",
@@ -140,7 +133,7 @@ export async function fetchYouTubeData(
       shares: 0,
       saves: 0,
       postedAt: "-",
-      status: isHashtagMatch ? "qualified" : "unqualified",
+      status: "qualified", // Otomatis diset QUALIFIED
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Gagal mengambil data YouTube";
@@ -154,7 +147,7 @@ function makeErrorVideo(sourceUrl: string, message: string): VideoItem {
     platform: "youtube",
     sourceUrl,
     videoUrl: sourceUrl,
-    title: "",
+    title: "Gagal Memuat Video (Private / Dihapus)",
     authorName: "unknown",
     authorDisplayName: "unknown",
     authorUrl: "",
