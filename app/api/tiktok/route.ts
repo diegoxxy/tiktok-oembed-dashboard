@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchTikTokDataWithRetry } from "@/lib/tiktok/server/fetchTikTok";
 import { fetchYouTubeData } from "@/lib/tiktok/server/fetchYouTube";
-import type { TikTokBatchRequest, TikTokBatchResponse, VideoItem } from "@/lib/tiktok/types";
+import type { VideoBatchRequest, VideoBatchResponse, VideoItem } from "@/lib/tiktok/types";
 
 const MAX_BATCH_SIZE = 30;
 
@@ -30,7 +30,7 @@ function sanitizeAndNormalizeUrl(url: string): { cleanUrl: string; videoId: stri
   const tiktokIdMatch = cleaned.match(/\/video\/(\d+)/i);
   const videoId = tiktokIdMatch ? tiktokIdMatch[1] : null;
 
-  // Jika terdapat Video ID, buat URL canonical netral untuk menghindari error typo username (@berframa vs @ber1rama)
+  // Jika terdapat Video ID, buat URL canonical netral untuk menghindari error typo username
   if (videoId && (cleaned.includes("tiktok.com") || cleaned.includes("vm.tiktok.com") || cleaned.includes("vt.tiktok.com"))) {
     cleaned = `https://www.tiktok.com/@tiktok/video/${videoId}`;
   }
@@ -72,7 +72,7 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as TikTokBatchRequest;
+    const body = (await request.json()) as VideoBatchRequest;
     const { videoUrls, targetHashtag } = body;
 
     if (!videoUrls || !Array.isArray(videoUrls) || videoUrls.length === 0) {
@@ -106,20 +106,19 @@ export async function POST(request: Request) {
         if (isYouTube) {
           const { cleanUrl } = sanitizeAndNormalizeUrl(originalInputUrl);
           videoData = await fetchYouTubeData(cleanUrl, cleanHashtag);
-          videoData.sourceUrl = originalInputUrl; // Kembalikan sourceUrl ke input awal user
+          videoData.sourceUrl = originalInputUrl;
         } else {
           const resolvedUrl = await resolveTikTokUrl(originalInputUrl);
           videoData = await fetchTikTokDataWithRetry(resolvedUrl, cleanHashtag);
 
           if (videoData) {
             videoData.platform = "tiktok";
-            videoData.sourceUrl = originalInputUrl; // Preservasi URL input asli
+            videoData.sourceUrl = originalInputUrl;
           } else {
             throw new Error("Data video kosong / Private");
           }
         }
       } catch (err) {
-        // Fallback objek jika gagal fetch
         videoData = {
           id: originalInputUrl,
           platform: isYouTube ? "youtube" : "tiktok",
@@ -144,13 +143,12 @@ export async function POST(request: Request) {
 
       videos.push(videoData);
 
-      // Delay ringan 250ms antar item untuk keamanan dari IP blocking TikTok
       if (i < videoUrls.length - 1) {
         await delay(250);
       }
     }
 
-    const response: TikTokBatchResponse = {
+    const response: VideoBatchResponse = {
       hashtag: `#${cleanHashtag}`,
       videos,
     };

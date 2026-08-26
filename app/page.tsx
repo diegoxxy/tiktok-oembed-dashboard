@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect } from "react";
 import type {
   CreatorSortKey,
   StatusFilter,
-  TikTokBatchResponse,
+  VideoBatchResponse,
   VideoItem,
   VideoSortKey,
   ViewMode,
@@ -70,7 +70,6 @@ export default function Home() {
   const [urlsInput, setUrlsInput] = useState("");
 
   const [loading, setLoading] = useState(false);
-  const [retryingUrl, setRetryingUrl] = useState<string | null>(null);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   const [allVideos, setAllVideos] = useState<VideoItem[]>([]);
@@ -83,7 +82,7 @@ export default function Home() {
   const [creatorSort, setCreatorSort] = useState<CreatorSortKey>("creator_views_desc");
   const [selectedCreatorName, setSelectedCreatorName] = useState<string | null>(null);
 
-  // Memuat data hasil scan terakhir dari cache tanpa mengisi form input secara otomatis
+  // Memuat data hasil scan terakhir dari cache
   useEffect(() => {
     const cachedVideos = localStorage.getItem("tiktok_analytics_last_scan");
 
@@ -126,7 +125,7 @@ export default function Home() {
           body: JSON.stringify({ videoUrls: chunk, targetHashtag: cleanHashtag }),
         });
 
-        const data = (await res.json()) as TikTokBatchResponse;
+        const data = (await res.json()) as VideoBatchResponse;
 
         if (!res.ok) {
           throw new Error((data as unknown as { error?: string }).error || "Request batch gagal");
@@ -135,7 +134,7 @@ export default function Home() {
         if (data.videos) {
           setAllVideos((prev) => [...prev, ...data.videos]);
           collectedVideos.push(...data.videos);
-          toCache.push(...data.videos.map((v) => ({ sourceUrl: v.sourceUrl, video: v })));
+          toCache.push(...data.videos.map((v: VideoItem) => ({ sourceUrl: v.sourceUrl, video: v })));
         }
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : "Gagal menghubungi server";
@@ -158,45 +157,6 @@ export default function Home() {
   }
 
   /**
-   * FITUR BARU: Melakukan Retry Scan ulang HANYA untuk 1 link yang error
-   */
-  async function handleRetrySingleUrl(sourceUrl: string) {
-    if (!sourceUrl || retryingUrl) return;
-
-    setRetryingUrl(sourceUrl);
-    const cleanHashtag = targetHashtag.replace(/^#/, "").trim() || "campaign";
-
-    try {
-      const res = await fetch("/api/tiktok", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ videoUrls: [sourceUrl], targetHashtag: cleanHashtag }),
-      });
-
-      const data = (await res.json()) as TikTokBatchResponse;
-
-      if (!res.ok) {
-        throw new Error((data as unknown as { error?: string }).error || "Gagal retry link");
-      }
-
-      if (data.videos && data.videos.length > 0) {
-        const updatedVideo = data.videos[0];
-        setAllVideos((prev) => {
-          const updatedList = prev.map((v) => (v.sourceUrl === sourceUrl ? updatedVideo : v));
-          localStorage.setItem("tiktok_analytics_last_scan", JSON.stringify(updatedList));
-          return updatedList;
-        });
-        await setManyInCache([{ sourceUrl: updatedVideo.sourceUrl, video: updatedVideo }]);
-      }
-    } catch (err: unknown) {
-      console.error("Gagal melakukan retry pada link:", sourceUrl, err);
-      alert("Link tetap tidak bisa dimuat. Kemungkinan video bersifat Private atau sudah Dihapus.");
-    } finally {
-      setRetryingUrl(null);
-    }
-  }
-
-  /**
    * Reset seluruh dashboard dan menghapus cache lokal
    */
   function handleReset() {
@@ -204,8 +164,6 @@ export default function Home() {
     setTargetHashtag("");
     setUrlsInput("");
     localStorage.removeItem("tiktok_analytics_last_scan");
-    localStorage.removeItem("tiktok_analytics_last_hashtag");
-    localStorage.removeItem("tiktok_analytics_last_urls");
   }
 
   const globalMetrics = useMemo(() => computeGlobalMetrics(allVideos), [allVideos]);
@@ -238,7 +196,7 @@ export default function Home() {
   );
 
   const hasResult = allVideos.length > 0;
-  const errorCount = useMemo(() => allVideos.filter((v) => v.status === "error").length, [allVideos]);
+  const errorCount = useMemo(() => allVideos.filter((v: VideoItem) => v.status === "error").length, [allVideos]);
 
   return (
     <main className="min-h-screen bg-[#0b0f19] text-slate-100 p-4 md:p-8 font-sans">
@@ -293,7 +251,7 @@ export default function Home() {
               <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-800/40 text-amber-300 text-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div>
                   <strong className="font-semibold text-amber-200">Perhatian:</strong> Ditemukan{" "}
-                  <span className="font-bold underline">{errorCount} link video error/unknown</span>[cite: 11]. Kemungkinan karena link typo, video private, atau rate-limit TikTok[cite: 11].
+                  <span className="font-bold underline">{errorCount} link video error/unknown</span>. Kemungkinan karena link typo, video private, atau rate-limit API.
                 </div>
               </div>
             )}

@@ -1,7 +1,11 @@
-import Link from "next/link";
 import type { CreatorGroup } from "@/lib/tiktok/types";
 import { formatCompactViews } from "@/lib/tiktok/format";
 import { Crown, Video, Eye, Heart } from "lucide-react";
+
+interface FolderViewProps {
+  creators: CreatorGroup[];
+  onOpenCreatorDrawer?: (authorName: string) => void;
+}
 
 function avatarHue(name: string): number {
   let hash = 0;
@@ -12,7 +16,13 @@ function avatarHue(name: string): number {
 function CreatorAvatar({ name, avatarUrl }: { name: string; avatarUrl: string }) {
   if (avatarUrl) {
     // eslint-disable-next-line @next/next/no-img-element -- CDN domain TikTok berubah-ubah, tidak cocok untuk next/image allowlist
-    return <img src={avatarUrl} alt={name} className="w-11 h-11 rounded-full object-cover border border-slate-700 flex-shrink-0" />;
+    return (
+      <img
+        src={avatarUrl}
+        alt={name}
+        className="w-11 h-11 rounded-full object-cover border border-slate-700 flex-shrink-0"
+      />
+    );
   }
   const hue = avatarHue(name);
   return (
@@ -25,11 +35,18 @@ function CreatorAvatar({ name, avatarUrl }: { name: string; avatarUrl: string })
   );
 }
 
-function CreatorCard({ creator }: { creator: CreatorGroup }) {
+function CreatorCard({
+  creator,
+  onOpenCreatorDrawer,
+}: {
+  creator: CreatorGroup;
+  onOpenCreatorDrawer?: (authorName: string) => void;
+}) {
   return (
-    <Link
-      href={`/creator/${encodeURIComponent(creator.authorName)}`}
-      className="block text-left bg-[#0b0f19] border border-slate-800 hover:border-cyan-500/50 rounded-xl p-4 transition-all hover:translate-y-[-2px] cursor-pointer relative group"
+    <button
+      type="button"
+      onClick={() => onOpenCreatorDrawer?.(creator.authorName)}
+      className="w-full text-left bg-[#0b0f19] border border-slate-800 hover:border-cyan-500/50 rounded-xl p-4 transition-all hover:translate-y-[-2px] cursor-pointer relative group"
     >
       {creator.isTopCreator && (
         <span className="absolute top-3 right-3 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-400 bg-amber-950/40 border border-amber-900/50 px-1.5 py-0.5 rounded">
@@ -59,11 +76,11 @@ function CreatorCard({ creator }: { creator: CreatorGroup }) {
           {formatCompactViews(creator.totalLikes || 0)}
         </div>
       </div>
-    </Link>
+    </button>
   );
 }
 
-export default function FolderView({ creators }: { creators: CreatorGroup[] }) {
+export default function FolderView({ creators, onOpenCreatorDrawer }: FolderViewProps) {
   if (creators.length === 0) {
     return (
       <div className="bg-[#131b2e] border border-[#1e293b] rounded-xl p-10 text-center text-slate-400">
@@ -75,7 +92,11 @@ export default function FolderView({ creators }: { creators: CreatorGroup[] }) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
       {creators.map((creator) => (
-        <CreatorCard key={creator.authorName} creator={creator} />
+        <CreatorCard
+          key={creator.authorName}
+          creator={creator}
+          onOpenCreatorDrawer={onOpenCreatorDrawer}
+        />
       ))}
     </div>
   );
