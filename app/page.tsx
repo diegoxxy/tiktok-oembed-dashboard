@@ -40,16 +40,21 @@ function makeErrorVideo(sourceUrl: string, message: string): VideoItem {
     id: sourceUrl,
     sourceUrl,
     videoUrl: sourceUrl,
-    title: "",
+    title: "Gagal Memuat Video",
     authorName: "unknown",
     authorDisplayName: "unknown",
     authorUrl: "",
     authorAvatar: "",
     coverUrl: "",
     views: 0,
+    likes: 0,
+    comments: 0,
+    shares: 0,
+    saves: 0,
+    postedAt: "",
     status: "error",
     errorMessage: message,
-  };
+  } as VideoItem;
 }
 
 export default function Home() {
@@ -70,7 +75,6 @@ export default function Home() {
   const [creatorSort, setCreatorSort] = useState<CreatorSortKey>("creator_views_desc");
   const [selectedCreatorName, setSelectedCreatorName] = useState<string | null>(null);
 
-  // MEMBACA SESI HASHING & VIDEO TERAKHIR SAAT DASHBOARD DIBUKA
   useEffect(() => {
     const cachedVideos = localStorage.getItem("tiktok_analytics_last_scan");
     const cachedHashtag = localStorage.getItem("tiktok_analytics_last_hashtag");
@@ -99,7 +103,6 @@ export default function Home() {
     const cleanHashtag = targetHashtag.replace(/^#/, "").trim();
     const urls = parseUrlsFromText(urlsInput);
 
-    // Simpan input hashtag & URLs ke localStorage
     localStorage.setItem("tiktok_analytics_last_hashtag", targetHashtag);
     localStorage.setItem("tiktok_analytics_last_urls", urlsInput);
 
@@ -142,7 +145,6 @@ export default function Home() {
       await setManyInCache(toCache);
     }
 
-    // SIMPAN HASIL SCAN BARU KE LOCALSTORAGE
     localStorage.setItem("tiktok_analytics_last_scan", JSON.stringify(collectedVideos));
 
     setLoading(false);
@@ -199,12 +201,8 @@ export default function Home() {
 
         <InputPanel
           targetHashtag={targetHashtag}
-          setTargetHashtag={setTargetHashtag}
           onHashtagChange={setTargetHashtag}
-          urlsInput={urlsInput}
-          setUrlsInput={setUrlsInput}
           rawUrls={urlsInput}
-          setRawUrls={setUrlsInput}
           onRawUrlsChange={setUrlsInput}
           onAnalyze={handleScan}
           isLoading={loading}
@@ -259,7 +257,7 @@ export default function Home() {
             />
 
             {viewMode === "folder" ? (
-              <FolderView creators={creatorsForFolder} onSelectCreator={setSelectedCreatorName} />
+              <FolderView creators={creatorsForFolder} onOpenCreatorDrawer={setSelectedCreatorName} />
             ) : (
               <MasterTable videos={sortedVideosForTable} />
             )}
