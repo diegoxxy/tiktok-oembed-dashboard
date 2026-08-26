@@ -21,7 +21,51 @@ function cleanAndFixTikTokUrl(url: string): string {
   }
 }
 
-export async function parseImportFile(file: File): Promise<string[]> {
+export interface ParseResult {
+  urls: string[];
+  tiktokCount: number;
+  youtubeCount: number;
+  totalCount: number;
+  summaryMessage: string;
+}
+
+/**
+ * Menghasilkan pesan notifikasi yang merinci jumlah link TikTok dan YouTube
+ */
+export function getImportSummary(urls: string[]): ParseResult {
+  let tiktokCount = 0;
+  let youtubeCount = 0;
+
+  urls.forEach((url) => {
+    const lower = url.toLowerCase();
+    if (lower.includes("tiktok.com")) {
+      tiktokCount++;
+    } else if (lower.includes("youtube.com") || lower.includes("youtu.be")) {
+      youtubeCount++;
+    }
+  });
+
+  const parts: string[] = [];
+  if (tiktokCount > 0) parts.push(`${tiktokCount} link TikTok`);
+  if (youtubeCount > 0) parts.push(`${youtubeCount} link YouTube`);
+
+  let summaryMessage = "Berhasil mengimpor ";
+  if (parts.length > 0) {
+    summaryMessage += parts.join(" dan ") + "!";
+  } else {
+    summaryMessage = `Berhasil mengimpor ${urls.length} link!`;
+  }
+
+  return {
+    urls,
+    tiktokCount,
+    youtubeCount,
+    totalCount: urls.length,
+    summaryMessage,
+  };
+}
+
+export async function parseImportFile(file: File): Promise<ParseResult> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
@@ -29,7 +73,7 @@ export async function parseImportFile(file: File): Promise<string[]> {
       try {
         const data = e.target?.result;
         if (!data) {
-          resolve([]);
+          resolve(getImportSummary([]));
           return;
         }
 
@@ -63,7 +107,7 @@ export async function parseImportFile(file: File): Promise<string[]> {
         });
 
         const uniqueUrls = Array.from(new Set(extractedUrls));
-        resolve(uniqueUrls);
+        resolve(getImportSummary(uniqueUrls));
       } catch (err) {
         console.error("Error parsing excel file:", err);
         reject(err);

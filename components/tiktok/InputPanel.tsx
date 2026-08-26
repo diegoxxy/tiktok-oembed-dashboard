@@ -2,7 +2,7 @@
 
 import React, { useRef, useState, useEffect } from "react";
 import { Upload, Play } from "lucide-react";
-import { parseImportFile } from "@/lib/tiktok/importFile";
+import { parseImportFile, ParseResult } from "@/lib/tiktok/importFile";
 
 export interface InputPanelProps {
   hashtag?: string;
@@ -65,9 +65,23 @@ export const InputPanel: React.FC<InputPanelProps> = (props) => {
     if (!file) return;
 
     try {
-      const extractedUrls = await parseImportFile(file);
+      const result = await parseImportFile(file);
+
+      // Tangani baik mengembalikan object ParseResult maupun array string[]
+      let extractedUrls: string[] = [];
+      let summaryMessage = "";
+
+      if (Array.isArray(result)) {
+        extractedUrls = result;
+        summaryMessage = `Berhasil mengimpor ${extractedUrls.length} link!`;
+      } else if (result && typeof result === "object") {
+        const parseResult = result as ParseResult;
+        extractedUrls = parseResult.urls || [];
+        summaryMessage = parseResult.summaryMessage || `Berhasil mengimpor ${extractedUrls.length} link!`;
+      }
+
       if (!extractedUrls || extractedUrls.length === 0) {
-        alert("Tidak ditemukan URL TikTok valid dalam file Excel/CSV tersebut.");
+        alert("Tidak ditemukan URL TikTok atau YouTube yang valid dalam file Excel/CSV tersebut.");
         return;
       }
 
@@ -81,7 +95,9 @@ export const InputPanel: React.FC<InputPanelProps> = (props) => {
 
       // Update local & parent state sekaligus
       handleUrlsChange(newText);
-      alert(`Berhasil mengimpor ${extractedUrls.length} link TikTok!`);
+
+      // Tampilkan notifikasi dinamis (TikTok & YouTube)
+      alert(summaryMessage);
 
       if (props.onImportSuccess) {
         props.onImportSuccess(extractedUrls);
@@ -113,7 +129,7 @@ export const InputPanel: React.FC<InputPanelProps> = (props) => {
       <div>
         <div className="flex items-center justify-between mb-2">
           <label className="block text-xs font-bold tracking-wider text-slate-400 uppercase">
-            Daftar Link Video TikTok (1 URL Per Baris)
+            Daftar Link Video TikTok & YouTube (1 URL Per Baris)
           </label>
           <div>
             <input
@@ -137,7 +153,7 @@ export const InputPanel: React.FC<InputPanelProps> = (props) => {
           rows={6}
           value={rawUrls}
           onChange={(e) => handleUrlsChange(e.target.value)}
-          placeholder="https://www.tiktok.com/@username/video/123456789&#10;https://vt.tiktok.com/ZSXXXXXX/"
+          placeholder="https://www.tiktok.com/@username/video/123456789&#10;https://www.youtube.com/shorts/c7TRyQI15Qk"
           className="w-full bg-[#0B0F19] border border-[#1E293B] rounded-lg p-4 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition-colors resize-y"
         />
       </div>

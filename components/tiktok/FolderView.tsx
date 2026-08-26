@@ -15,7 +15,7 @@ function avatarHue(name: string): number {
 
 function CreatorAvatar({ name, avatarUrl }: { name: string; avatarUrl: string }) {
   if (avatarUrl) {
-    // eslint-disable-next-line @next/next/no-img-element -- CDN domain TikTok berubah-ubah
+    // eslint-disable-next-line @next/next/no-img-element -- CDN domain TikTok/YouTube berubah-ubah
     return (
       <img
         src={avatarUrl}
