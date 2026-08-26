@@ -6,33 +6,48 @@ import type { TikTokBatchRequest, TikTokBatchResponse, VideoItem } from "@/lib/t
 const MAX_BATCH_SIZE = 30;
 
 /**
- * Membersihkan query parameters dan memperbaiki typo sintaks URL TikTok
+ * Normalisasi URL TikTok:
+ * 1. Menghilangkan query params.
+ * 2. Memperbaiki typo penulisan path slash (/video767... -> /video/767...).
+ * 3. Menetralkan username typo dengan mengekstrak Video ID secara presisi.
  */
-function sanitizeUrl(url: string): string {
+function sanitizeAndNormalizeUrl(url: string): { cleanUrl: string; videoId: string | null } {
   let cleaned = url.trim();
 
-  // Perbaiki typo missing slash setelah kata 'video' (misal: /video767643... -> /video/767643...)
+  // Fix typo missing slash atau double slash pada /video/
   cleaned = cleaned.replace(/\/video(\d+)/gi, "/video/$1");
-
-  // Perbaiki typo double slash (misal: /video//7677... -> /video/7677...)
   cleaned = cleaned.replace(/\/video\/{2,}/gi, "/video/");
 
-  // Hapus query parameters (misal: ?is_from_webapp=1&sender_device=pc)
+  // Hapus query parameters (?is_from_webapp=1, dll)
   try {
     const parsed = new URL(cleaned);
-    return `${parsed.origin}${parsed.pathname}`;
+    cleaned = `${parsed.origin}${parsed.pathname}`;
   } catch {
-    return cleaned;
+    // Apabila bukan URL valid, kembalikan string awal
   }
+
+  // Ekstraksi Video ID TikTok jika ada (19 digit angka)
+  const tiktokIdMatch = cleaned.match(/\/video\/(\d+)/i);
+  const videoId = tiktokIdMatch ? tiktokIdMatch[1] : null;
+
+  // Jika terdapat Video ID, buat URL canonical netral untuk menghindari error typo username (@berframa vs @ber1rama)
+  if (videoId && (cleaned.includes("tiktok.com") || cleaned.includes("vm.tiktok.com") || cleaned.includes("vt.tiktok.com"))) {
+    cleaned = `https://www.tiktok.com/@tiktok/video/${videoId}`;
+  }
+
+  return { cleanUrl: cleaned, videoId };
 }
 
+/**
+ * Resolve URL pendek (vt.tiktok.com / vm.tiktok.com)
+ */
 async function resolveTikTokUrl(url: string): Promise<string> {
-  const clean = sanitizeUrl(url);
-  if (!clean) return "";
+  const { cleanUrl } = sanitizeAndNormalizeUrl(url);
+  if (!cleanUrl) return "";
 
-  if (clean.includes("vt.tiktok.com") || clean.includes("vm.tiktok.com")) {
+  if (cleanUrl.includes("vt.tiktok.com") || cleanUrl.includes("vm.tiktok.com")) {
     try {
-      const response = await fetch(clean, {
+      const response = await fetch(cleanUrl, {
         method: "GET",
         redirect: "follow",
         cache: "no-store",
@@ -41,12 +56,16 @@ async function resolveTikTokUrl(url: string): Promise<string> {
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         },
       });
-      return response.url ? sanitizeUrl(response.url) : clean;
+      if (response.url) {
+        const resolved = sanitizeAndNormalizeUrl(response.url);
+        return resolved.cleanUrl;
+      }
+      return cleanUrl;
     } catch {
-      return clean;
+      return cleanUrl;
     }
   }
-  return clean;
+  return cleanUrl;
 }
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -72,33 +91,43 @@ export async function POST(request: Request) {
     }
 
     const cleanHashtag = targetHashtag.toLowerCase().replace("#", "").trim();
-    const validUrls = videoUrls.map((u) => sanitizeUrl(u)).filter(Boolean);
 
+    // Proses fetch setiap URL
     const videos: VideoItem[] = [];
-    for (let i = 0; i < validUrls.length; i++) {
-      const originalUrl = validUrls[i];
+
+    for (let i = 0; i < videoUrls.length; i++) {
+      const originalInputUrl = videoUrls[i].trim();
+      if (!originalInputUrl) continue;
+
+      const isYouTube = originalInputUrl.includes("youtube.com") || originalInputUrl.includes("youtu.be");
       let videoData: VideoItem;
 
       try {
-        if (originalUrl.includes("youtube.com") || originalUrl.includes("youtu.be")) {
-          videoData = await fetchYouTubeData(originalUrl, cleanHashtag);
+        if (isYouTube) {
+          const { cleanUrl } = sanitizeAndNormalizeUrl(originalInputUrl);
+          videoData = await fetchYouTubeData(cleanUrl, cleanHashtag);
+          videoData.sourceUrl = originalInputUrl; // Kembalikan sourceUrl ke input awal user
         } else {
-          const resolvedUrl = await resolveTikTokUrl(originalUrl);
+          const resolvedUrl = await resolveTikTokUrl(originalInputUrl);
           videoData = await fetchTikTokDataWithRetry(resolvedUrl, cleanHashtag);
+
           if (videoData) {
             videoData.platform = "tiktok";
+            videoData.sourceUrl = originalInputUrl; // Preservasi URL input asli
+          } else {
+            throw new Error("Data video kosong / Private");
           }
         }
       } catch (err) {
-        const isYouTube = originalUrl.includes("youtube.com") || originalUrl.includes("youtu.be");
+        // Fallback objek jika gagal fetch
         videoData = {
-          id: originalUrl,
+          id: originalInputUrl,
           platform: isYouTube ? "youtube" : "tiktok",
-          sourceUrl: originalUrl,
-          videoUrl: originalUrl,
-          title: "Gagal Memuat Video",
+          sourceUrl: originalInputUrl,
+          videoUrl: originalInputUrl,
+          title: "Gagal Memuat Video (Private / Typo / Limit)",
           authorName: "unknown",
-          authorDisplayName: "unknown",
+          authorDisplayName: "Unknown / Error",
           authorUrl: "",
           authorAvatar: "",
           coverUrl: "",
@@ -109,14 +138,15 @@ export async function POST(request: Request) {
           saves: 0,
           postedAt: "-",
           status: "error",
-          errorMessage: err instanceof Error ? err.message : "Gagal memuat video",
+          errorMessage: err instanceof Error ? err.message : "Gagal memuat metadata video",
         };
       }
 
       videos.push(videoData);
 
-      if (i < validUrls.length - 1) {
-        await delay(300);
+      // Delay ringan 250ms antar item untuk keamanan dari IP blocking TikTok
+      if (i < videoUrls.length - 1) {
+        await delay(250);
       }
     }
 
