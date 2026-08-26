@@ -292,15 +292,13 @@ export default function Home() {
             />
 
             {viewMode === "folder" ? (
-              <FolderView creators={creatorsForFolder} onOpenCreatorDrawer={setSelectedCreatorName} />
+              <FolderView creators={creatorsForFolder}/>
             ) : (
               <MasterTable videos={sortedVideosForTable} />
             )}
           </div>
         )}
       </div>
-
-      <CreatorDrawer creator={selectedCreator} onClose={() => setSelectedCreatorName(null)} />
     </main>
   );
 }
