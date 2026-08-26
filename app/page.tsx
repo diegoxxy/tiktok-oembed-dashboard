@@ -23,6 +23,11 @@ import FolderView from "@/components/tiktok/FolderView";
 import MasterTable from "@/components/tiktok/MasterTable";
 
 /**
+ * Helper delay untuk menghindari pembatasan Rate Limit API
+ */
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
  * Memisahkan baris teks menjadi daftar URL yang unik dan bersih.
  */
 function parseUrlsFromText(text: string): string[] {
@@ -47,7 +52,7 @@ function makeErrorVideo(sourceUrl: string, message: string): VideoItem {
     platform: isYouTube ? "youtube" : "tiktok",
     sourceUrl,
     videoUrl: sourceUrl,
-    title: "Gagal Memuat Video (Private / Limit / Typo)",
+    title: "Gagal Memuat Video (Private / Limit API / Typo)",
     authorName: "unknown",
     authorDisplayName: "Unknown / Error",
     authorUrl: "",
@@ -116,6 +121,12 @@ export default function Home() {
 
     for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
       const chunk = chunks[chunkIndex];
+
+      // Jeda 1.2 detik tiap batch (kecuali batch pertama) untuk menekan Rate-Limit
+      if (chunkIndex > 0) {
+        await delay(1200);
+      }
+
       try {
         const res = await fetch("/api/tiktok", {
           method: "POST",
@@ -182,7 +193,7 @@ export default function Home() {
     [filteredVideos, videoSort]
   );
 
-  // Mengurutkan dan memfilter agar folder @unknown tidak muncul di UI
+  // Mengurutkan dan memfilter kreator utama (Menyaring folder 'unknown')
   const creatorsForFolder = useMemo(
     () =>
       sortCreators(groupVideosByCreator(filteredVideos), creatorSort).filter(
@@ -193,7 +204,10 @@ export default function Home() {
 
   const hasResult = allVideos.length > 0;
   const errorCount = useMemo(
-    () => allVideos.filter((v: VideoItem) => v.status === "error" || v.authorName.toLowerCase() === "unknown").length,
+    () =>
+      allVideos.filter(
+        (v: VideoItem) => v.status === "error" || v.authorName.toLowerCase() === "unknown"
+      ).length,
     [allVideos]
   );
 
@@ -252,7 +266,8 @@ export default function Home() {
               <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-800/40 text-amber-300 text-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div>
                   <strong className="font-semibold text-amber-200">Perhatian:</strong> Ditemukan{" "}
-                  <span className="font-bold underline">{errorCount} link video error/unknown</span>. Kemungkinan karena link typo, video private, atau rate-limit API.
+                  <span className="font-bold underline">{errorCount} link video error/unknown</span>.
+                  Kemungkinan karena link typo, video private, atau rate-limit API.
                 </div>
               </div>
             )}

@@ -8,7 +8,10 @@ import { Eye, Heart, MessageSquare, Share2, Bookmark, ArrowLeft, ExternalLink } 
 
 export default function CreatorDetailPage({ params }: { params: Promise<{ username: string }> }) {
   const resolvedParams = use(params);
-  const username = decodeURIComponent(resolvedParams.username);
+  
+  // Normalisasi username: Dekode URI & bersihkan awalan '@'
+  const rawUsername = decodeURIComponent(resolvedParams.username);
+  const cleanUsername = rawUsername.replace(/^@/, "").trim();
 
   const [allVideos, setAllVideos] = useState<VideoItem[]>([]);
 
@@ -27,22 +30,28 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
     }
   }, []);
 
-  // Filter video khusus username ini
+  // Filter video khusus username ini (abaikan '@' dan case-insensitive)
   const creatorVideos = useMemo(() => {
-    return allVideos.filter(
-      (v) => v.authorName?.toLowerCase() === username.toLowerCase()
-    );
-  }, [allVideos, username]);
+    return allVideos.filter((v) => {
+      const author = (v.authorName || "").replace(/^@/, "").trim().toLowerCase();
+      return author === cleanUsername.toLowerCase();
+    });
+  }, [allVideos, cleanUsername]);
 
   // Deteksi Platform Kreator Utama & URL Profil
   const primaryPlatform = useMemo(() => {
     const firstVideo = creatorVideos[0];
-    if (!firstVideo) return { name: "TikTok", profileUrl: `https://www.tiktok.com/@${username}` };
+    if (!firstVideo) {
+      return {
+        name: "TikTok",
+        profileUrl: `https://www.tiktok.com/@${cleanUsername}`,
+      };
+    }
 
     const targetUrl = firstVideo.videoUrl || firstVideo.sourceUrl || "";
     const isYouTube =
       firstVideo.platform === "youtube" ||
-      targetUrl.includes("youtube") ||
+      targetUrl.includes("youtube.com") ||
       targetUrl.includes("youtu.be");
 
     return {
@@ -50,10 +59,10 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
       profileUrl:
         firstVideo.authorUrl ||
         (isYouTube
-          ? `https://www.youtube.com/@${username}`
-          : `https://www.tiktok.com/@${username}`),
+          ? `https://www.youtube.com/@${cleanUsername}`
+          : `https://www.tiktok.com/@${cleanUsername}`),
     };
-  }, [creatorVideos, username]);
+  }, [creatorVideos, cleanUsername]);
 
   // Hitung total engagement per kreator
   const stats = useMemo(() => {
@@ -87,15 +96,15 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
               {creatorVideos[0]?.authorAvatar ? (
                 <img
                   src={creatorVideos[0].authorAvatar}
-                  alt={username}
+                  alt={cleanUsername}
                   className="w-full h-full object-cover"
                 />
               ) : (
-                `@${username.slice(0, 2).toUpperCase()}`
+                `@${cleanUsername.slice(0, 2).toUpperCase()}`
               )}
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-white">@{username}</h1>
+              <h1 className="text-2xl font-bold text-white">@{cleanUsername}</h1>
               <p className="text-sm text-slate-400 mt-0.5">
                 Total Submissions: <strong className="text-white">{creatorVideos.length} Video</strong>
               </p>
@@ -141,7 +150,7 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
 
         {creatorVideos.length === 0 ? (
           <div className="bg-[#131b2e] border border-[#1e293b] p-8 rounded-xl text-center text-slate-400">
-            Data video belum tersimpan di browser. Silakan lakukan **Scan** ulang pada halaman utama.
+            Data video tidak ditemukan untuk kreator ini. Silakan lakukan **Scan** ulang pada halaman utama.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
