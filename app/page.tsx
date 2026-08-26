@@ -21,7 +21,6 @@ import KpiRibbon from "@/components/tiktok/KpiRibbon";
 import Toolbar from "@/components/tiktok/Toolbar";
 import FolderView from "@/components/tiktok/FolderView";
 import MasterTable from "@/components/tiktok/MasterTable";
-import CreatorDrawer from "@/components/tiktok/CreatorDrawer";
 
 /**
  * Memisahkan baris teks menjadi daftar URL yang unik dan bersih.
@@ -80,7 +79,6 @@ export default function Home() {
   const [viewMode, setViewMode] = useState<ViewMode>("folder");
   const [videoSort, setVideoSort] = useState<VideoSortKey>("views_desc");
   const [creatorSort, setCreatorSort] = useState<CreatorSortKey>("creator_views_desc");
-  const [selectedCreatorName, setSelectedCreatorName] = useState<string | null>(null);
 
   // Memuat data hasil scan terakhir dari cache
   useEffect(() => {
@@ -184,19 +182,20 @@ export default function Home() {
     [filteredVideos, videoSort]
   );
 
+  // Mengurutkan dan memfilter agar folder @unknown tidak muncul di UI
   const creatorsForFolder = useMemo(
-    () => sortCreators(groupVideosByCreator(filteredVideos), creatorSort),
+    () =>
+      sortCreators(groupVideosByCreator(filteredVideos), creatorSort).filter(
+        (creator) => creator.authorName.toLowerCase() !== "unknown"
+      ),
     [filteredVideos, creatorSort]
   );
 
-  const allCreatorsUnfiltered = useMemo(() => groupVideosByCreator(allVideos), [allVideos]);
-  const selectedCreator = useMemo(
-    () => allCreatorsUnfiltered.find((c) => c.authorName === selectedCreatorName) ?? null,
-    [allCreatorsUnfiltered, selectedCreatorName]
-  );
-
   const hasResult = allVideos.length > 0;
-  const errorCount = useMemo(() => allVideos.filter((v: VideoItem) => v.status === "error").length, [allVideos]);
+  const errorCount = useMemo(
+    () => allVideos.filter((v: VideoItem) => v.status === "error" || v.authorName.toLowerCase() === "unknown").length,
+    [allVideos]
+  );
 
   return (
     <main className="min-h-screen bg-[#0b0f19] text-slate-100 p-4 md:p-8 font-sans">
@@ -241,7 +240,9 @@ export default function Home() {
         {loading && progress && (
           <div className="text-xs text-cyan-400 bg-cyan-950/30 border border-cyan-800/50 p-3 rounded-lg flex justify-between items-center">
             <span>Memproses analisis link...</span>
-            <span className="font-mono font-bold">{progress.done} / {progress.total} link</span>
+            <span className="font-mono font-bold">
+              {progress.done} / {progress.total} link
+            </span>
           </div>
         )}
 
@@ -256,7 +257,10 @@ export default function Home() {
               </div>
             )}
 
-            <KpiRibbon metrics={globalMetrics} hashtag={`#${targetHashtag.toLowerCase().replace("#", "").trim()}`} />
+            <KpiRibbon
+              metrics={globalMetrics}
+              hashtag={`#${targetHashtag.toLowerCase().replace("#", "").trim()}`}
+            />
 
             <Toolbar
               search={search}
@@ -292,7 +296,7 @@ export default function Home() {
             />
 
             {viewMode === "folder" ? (
-              <FolderView creators={creatorsForFolder}/>
+              <FolderView creators={creatorsForFolder} />
             ) : (
               <MasterTable videos={sortedVideosForTable} />
             )}

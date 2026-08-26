@@ -30,7 +30,7 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
   // Filter video khusus username ini
   const creatorVideos = useMemo(() => {
     return allVideos.filter(
-      (v) => v.authorName.toLowerCase() === username.toLowerCase()
+      (v) => v.authorName?.toLowerCase() === username.toLowerCase()
     );
   }, [allVideos, username]);
 
@@ -39,14 +39,19 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
     const firstVideo = creatorVideos[0];
     if (!firstVideo) return { name: "TikTok", profileUrl: `https://www.tiktok.com/@${username}` };
 
+    const targetUrl = firstVideo.videoUrl || firstVideo.sourceUrl || "";
     const isYouTube =
       firstVideo.platform === "youtube" ||
-      firstVideo.sourceUrl?.includes("youtube") ||
-      firstVideo.sourceUrl?.includes("youtu.be");
+      targetUrl.includes("youtube") ||
+      targetUrl.includes("youtu.be");
 
     return {
       name: isYouTube ? "YouTube" : "TikTok",
-      profileUrl: firstVideo.authorUrl || (isYouTube ? `https://www.youtube.com` : `https://www.tiktok.com/@${username}`),
+      profileUrl:
+        firstVideo.authorUrl ||
+        (isYouTube
+          ? `https://www.youtube.com/@${username}`
+          : `https://www.tiktok.com/@${username}`),
     };
   }, [creatorVideos, username]);
 
@@ -70,15 +75,15 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
         {/* Navigasi Kembali */}
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-sm text-cyan-400 hover:text-cyan-300 transition"
+          className="inline-flex items-center gap-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" /> Kembali ke Dashboard
         </Link>
 
         {/* Header Profil Kreator */}
-        <div className="bg-[#131b2e] border border-[#1e293b] p-6 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="bg-[#131b2e] border border-[#1e293b] p-6 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-slate-800 border-2 border-cyan-500/40 flex items-center justify-center text-xl font-bold text-cyan-400 overflow-hidden">
+            <div className="w-16 h-16 rounded-full bg-slate-800 border-2 border-cyan-500/40 flex items-center justify-center text-xl font-bold text-cyan-400 overflow-hidden shrink-0">
               {creatorVideos[0]?.authorAvatar ? (
                 <img
                   src={creatorVideos[0].authorAvatar}
@@ -141,36 +146,50 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {creatorVideos.map((video) => {
+              const targetUrl = video.videoUrl || video.sourceUrl || "#";
               const isYouTube =
                 video.platform === "youtube" ||
-                video.sourceUrl?.includes("youtube") ||
-                video.sourceUrl?.includes("youtu.be");
-              const platformLabel = isYouTube ? "YouTube" : "TikTok";
+                targetUrl.includes("youtube.com") ||
+                targetUrl.includes("youtu.be");
+              const platformName = isYouTube ? "YouTube" : "TikTok";
 
               return (
                 <div
-                  key={video.id || video.sourceUrl}
-                  className="bg-[#131b2e] border border-[#1e293b] p-4 rounded-xl flex gap-4"
+                  key={video.id || targetUrl}
+                  className="bg-[#131b2e] border border-[#1e293b] p-4 rounded-xl flex gap-4 shadow-md hover:border-slate-700 transition"
                 >
-                  <div className="w-28 h-40 bg-slate-900 rounded-lg overflow-hidden flex-shrink-0 border border-slate-800 relative">
+                  {/* Thumbnail / Cover */}
+                  <div className="w-28 h-40 bg-slate-900 rounded-lg overflow-hidden shrink-0 border border-slate-800 relative">
                     {video.coverUrl ? (
-                      <img src={video.coverUrl} alt={video.title} className="w-full h-full object-cover" />
+                      <img src={video.coverUrl} alt={video.title || "Video"} className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-xs text-slate-600">No Cover</div>
+                      <div className="w-full h-full flex items-center justify-center text-xs text-slate-600 p-2 text-center">
+                        No Cover
+                      </div>
                     )}
-                    <span className={`absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded ${
-                      video.status === "qualified" ? "bg-emerald-500/80 text-white" : "bg-rose-500/80 text-white"
-                    }`}>
-                      {video.status}
+                    <span
+                      className={`absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded capitalize ${
+                        video.status === "qualified"
+                          ? "bg-emerald-500/90 text-white"
+                          : "bg-rose-500/90 text-white"
+                      }`}
+                    >
+                      {video.status || "Unqualified"}
                     </span>
                   </div>
 
+                  {/* Detail Info & Stats */}
                   <div className="flex-1 flex flex-col justify-between min-w-0">
                     <div>
                       <p className="text-sm font-semibold text-white line-clamp-2">
-                        {video.title || "(Tanpa Caption)"}
+                        {video.title || "Gagal Memuat Video (Private / Dihapus / Typo)"}
                       </p>
-                      <p className="text-xs text-slate-400 mt-1">Diposting: {video.postedAt || "-"}</p>
+                      {video.errorMessage && (
+                        <p className="text-[11px] text-rose-400 mt-1">{video.errorMessage}</p>
+                      )}
+                      <p className="text-xs text-slate-400 mt-1">
+                        Diposting: {video.postedAt || "-"}
+                      </p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 text-xs py-2 border-y border-slate-800/80 my-2">
@@ -180,13 +199,18 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
                       <span className="text-purple-400 font-semibold">🔁 {formatFullNumber(video.shares)}</span>
                     </div>
 
+                    {/* Tombol Tonton Dinamis Sesuai Platform */}
                     <a
-                      href={video.videoUrl || video.sourceUrl}
+                      href={targetUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center justify-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-cyan-400 py-1.5 px-3 rounded-lg font-medium transition"
+                      className={`inline-flex items-center justify-center gap-1.5 text-xs py-2 px-3 rounded-lg font-medium transition ${
+                        isYouTube
+                          ? "bg-red-950/40 text-red-400 border border-red-800/50 hover:bg-red-900/50 hover:border-red-500/50"
+                          : "bg-cyan-950/40 text-cyan-400 border border-cyan-800/50 hover:bg-cyan-900/50 hover:border-cyan-500/50"
+                      }`}
                     >
-                      Tonton di {platformLabel} <ExternalLink className="w-3 h-3" />
+                      Tonton di {platformName} <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   </div>
                 </div>
