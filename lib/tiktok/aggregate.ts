@@ -13,36 +13,44 @@ export function computeGlobalMetrics(allVideos: VideoItem[]): GlobalMetrics {
   const unqualified = allVideos.filter((v) => v.status === "unqualified");
   const errored = allVideos.filter((v) => v.status === "error");
 
-  const totalViews = qualified.reduce((acc, v) => acc + (v.views || 0), 0);
-  const totalLikes = qualified.reduce((acc, v) => acc + (v.likes || 0), 0);
-  const totalComments = qualified.reduce((acc, v) => acc + (v.comments || 0), 0);
-  const totalShares = qualified.reduce((acc, v) => acc + (v.shares || 0), 0);
-  const totalSaves = qualified.reduce((acc, v) => acc + (v.saves || 0), 0);
+  // Hitung total akumulasi metrics dari seluruh video (Qualified + Unqualified)
+  const validVideos = allVideos.filter((v) => v.status !== "error");
+  const totalViews = validVideos.reduce((acc, v) => acc + (v.views || 0), 0);
+  const totalLikes = validVideos.reduce((acc, v) => acc + (v.likes || 0), 0);
+  const totalComments = validVideos.reduce((acc, v) => acc + (v.comments || 0), 0);
+  const totalShares = validVideos.reduce((acc, v) => acc + (v.shares || 0), 0);
+  const totalSaves = validVideos.reduce((acc, v) => acc + (v.saves || 0), 0);
 
+  // Grouping seluruh creator berdasarkan akumulasi total views
   const creatorViewMap = new Map<string, { authorName: string; authorDisplayName: string; totalViews: number }>();
-  for (const v of qualified) {
+  
+  for (const v of validVideos) {
     const key = normalizeUsername(v.authorName);
     const existing = creatorViewMap.get(key);
     if (existing) {
-      existing.totalViews += v.views;
+      existing.totalViews += (v.views || 0);
     } else {
       creatorViewMap.set(key, {
         authorName: key,
         authorDisplayName: v.authorDisplayName || key,
-        totalViews: v.views,
+        totalViews: v.views || 0,
       });
     }
   }
 
+  // Cari Top Creator murni berdasarkan views terbanyak
   let topCreator: GlobalMetrics["topCreator"] = null;
   for (const c of creatorViewMap.values()) {
-    if (!topCreator || c.totalViews > topCreator.totalViews) topCreator = c;
+    if (!topCreator || c.totalViews > topCreator.totalViews) {
+      topCreator = c;
+    }
   }
 
+  // Cari Top Video murni berdasarkan views terbanyak
   let topVideo: GlobalMetrics["topVideo"] = null;
-  for (const v of qualified) {
-    if (!topVideo || v.views > topVideo.views) {
-      topVideo = { title: v.title, authorName: v.authorName, views: v.views, videoUrl: v.videoUrl };
+  for (const v of validVideos) {
+    if (!topVideo || (v.views || 0) > topVideo.views) {
+      topVideo = { title: v.title, authorName: v.authorName, views: v.views || 0, videoUrl: v.videoUrl };
     }
   }
 
@@ -100,11 +108,12 @@ export function groupVideosByCreator(videos: VideoItem[]): CreatorGroup[] {
   }
 
   const groups = Array.from(map.values());
-  let top: CreatorGroup | null = null;
-  for (const g of groups) {
-    if (!top || g.totalViews > top.totalViews) top = g;
+  
+  // Urutkan grup kreaor berdasarkan total views secara eksplisit
+  groups.sort((a, b) => b.totalViews - a.totalViews);
+  if (groups.length > 0) {
+    groups[0].isTopCreator = true;
   }
-  if (top) top.isTopCreator = true;
 
   return groups;
 }

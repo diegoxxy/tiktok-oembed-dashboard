@@ -1,7 +1,9 @@
+export type Platform = "tiktok" | "youtube" | "instagram";
 export type VideoStatus = "qualified" | "unqualified" | "error";
 
 export interface VideoItem {
   id: string;
+  platform: Platform; // Tambahan field platform
   sourceUrl: string;
   videoUrl: string;
   title: string;
@@ -60,6 +62,7 @@ export interface AnalysisResult {
 }
 
 export type StatusFilter = "all" | VideoStatus;
+export type PlatformFilter = "all" | Platform; // Tambahan filter platform untuk UI
 export type ViewMode = "folder" | "table";
 export type VideoSortKey = "views_desc" | "views_asc";
 export type CreatorSortKey =
@@ -68,12 +71,12 @@ export type CreatorSortKey =
   | "creator_count_desc"
   | "creator_alpha_asc";
 
-export interface TikTokBatchRequest {
+export interface VideoBatchRequest {
   videoUrls: string[];
   targetHashtag: string;
 }
 
-export interface TikTokBatchResponse {
+export interface VideoBatchResponse {
   hashtag: string;
   videos: VideoItem[];
 }

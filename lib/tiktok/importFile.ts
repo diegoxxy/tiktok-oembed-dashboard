@@ -1,5 +1,26 @@
 import * as XLSX from "xlsx";
 
+/**
+ * Membersihkan URL TikTok dari typo sintaks dan query string/parameter anti-bot
+ */
+function cleanAndFixTikTokUrl(url: string): string {
+  let cleaned = url.trim().replace(/[;,\)\.]+$ /g, "");
+
+  // Fix typo missing slash after 'video' (misal: /video767643... -> /video/767643...)
+  cleaned = cleaned.replace(/\/video(\d+)/gi, "/video/$1");
+
+  // Fix typo double slash (misal: /video//7677... -> /video/7677...)
+  cleaned = cleaned.replace(/\/video\/{2,}/gi, "/video/");
+
+  // Hapus query parameter (misal: ?is_from_webapp=1&sender_device=pc)
+  try {
+    const parsed = new URL(cleaned);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return cleaned;
+  }
+}
+
 export async function parseImportFile(file: File): Promise<string[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -12,29 +33,28 @@ export async function parseImportFile(file: File): Promise<string[]> {
           return;
         }
 
-        // Baca array buffer
         const workbook = XLSX.read(data, { type: "array" });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
 
-        // Convert ke JSON Array (semua sel)
         const jsonRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
         const extractedUrls: string[] = [];
-        
-        // Regex fleksibel untuk menangkap tautan TikTok
-        const tiktokRegex = /https?:\/\/(?:www\.|vt\.|vm\.)?tiktok\.com\/[^\s"',]+/gi;
+
+        // Regex fleksibel menangkap TikTok & YouTube
+        const mediaRegex = /https?:\/\/(?:www\.|vt\.|vm\.)?(?:tiktok\.com|youtube\.com|youtu\.be)\/[^\s"',]+/gi;
 
         jsonRows.forEach((row) => {
           if (Array.isArray(row)) {
             row.forEach((cell) => {
               if (cell !== undefined && cell !== null) {
                 const cellStr = String(cell).trim();
-                const matches = cellStr.match(tiktokRegex);
+                const matches = cellStr.match(mediaRegex);
                 if (matches) {
                   matches.forEach((url) => {
-                    // Bersihkan karakter ekstra di ujung URL
-                    const cleanUrl = url.replace(/[;,\)\.]+$ /g, "").trim();
-                    extractedUrls.push(cleanUrl);
+                    const cleanUrl = cleanAndFixTikTokUrl(url);
+                    if (cleanUrl) {
+                      extractedUrls.push(cleanUrl);
+                    }
                   });
                 }
               }
@@ -51,8 +71,6 @@ export async function parseImportFile(file: File): Promise<string[]> {
     };
 
     reader.onerror = (error) => reject(error);
-    
-    // Gunakan ArrayBuffer
     reader.readAsArrayBuffer(file);
   });
 }

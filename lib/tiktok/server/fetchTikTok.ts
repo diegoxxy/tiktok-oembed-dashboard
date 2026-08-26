@@ -24,12 +24,9 @@ export async function fetchTikTokDataWithRetry(
     }
 
     const data = json.data;
-
-    // Ekstraksi Hashtag dari Deskripsi/Title
     const titleText = (data.title || "").toLowerCase();
     const isHashtagMatch = titleText.includes(`#${cleanHashtag}`);
 
-    // Parsing Posting Date
     let formattedDate = "-";
     if (data.create_time) {
       const dateObj = new Date(data.create_time * 1000);
@@ -42,6 +39,7 @@ export async function fetchTikTokDataWithRetry(
 
     return {
       id: data.id || resolvedUrl,
+      platform: "tiktok", // Tambahkan platform marker
       sourceUrl: resolvedUrl,
       videoUrl: data.play || resolvedUrl,
       title: data.title || "",
@@ -51,14 +49,11 @@ export async function fetchTikTokDataWithRetry(
       authorAvatar: data.author?.avatar || "",
       coverUrl: data.cover || "",
       views: Number(data.play_count || 0),
-
-      // Binding data engagement tambahan
       likes: Number(data.digg_count || 0),
       comments: Number(data.comment_count || 0),
       shares: Number(data.share_count || 0),
       saves: Number(data.collect_count || 0),
       postedAt: formattedDate,
-
       status: isHashtagMatch ? "qualified" : "unqualified",
     };
   } catch (err) {
@@ -70,6 +65,7 @@ export async function fetchTikTokDataWithRetry(
 function makeErrorVideo(sourceUrl: string, message: string): VideoItem {
   return {
     id: sourceUrl,
+    platform: "tiktok", // Tambahkan platform marker
     sourceUrl,
     videoUrl: sourceUrl,
     title: "",

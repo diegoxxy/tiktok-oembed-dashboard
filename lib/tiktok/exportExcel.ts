@@ -10,7 +10,7 @@ const STATUS_LABEL: Record<string, string> = {
   error: "Error/Private",
 };
 
-export function exportResultToExcel(result: AnalysisResult, fileNamePrefix = "tiktok-campaign") {
+export function exportResultToExcel(result: AnalysisResult, fileNamePrefix = "campaign-report") {
   const wb = XLSX.utils.book_new();
 
   // Sheet 1 — Ringkasan Utama
@@ -58,8 +58,9 @@ export function exportResultToExcel(result: AnalysisResult, fileNamePrefix = "ti
 
   // Sheet 3 — Semua Link Video & Metrics
   const videoRows = [
-    ["Posting Date", "Username", "Caption/Title", "Status", "Views", "Likes", "Comments", "Shares", "Saves", "Total Engagement", "Video URL"],
+    ["Platform", "Posting Date", "Username", "Caption/Title", "Status", "Views", "Likes", "Comments", "Shares", "Saves", "Total Engagement", "Video URL"],
     ...result.allVideos.map((v) => [
+      v.platform ? v.platform.toUpperCase() : "TIKTOK",
       v.postedAt || "-",
       `@${v.authorName}`,
       v.title,
@@ -74,7 +75,7 @@ export function exportResultToExcel(result: AnalysisResult, fileNamePrefix = "ti
     ]),
   ];
   const videoSheet = XLSX.utils.aoa_to_sheet(videoRows);
-  videoSheet["!cols"] = [{ wch: 14 }, { wch: 20 }, { wch: 50 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 45 }];
+  videoSheet["!cols"] = [{ wch: 10 }, { wch: 14 }, { wch: 20 }, { wch: 50 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 45 }];
   XLSX.utils.book_append_sheet(wb, videoSheet, "Detail Video");
 
   const stamp = new Date().toISOString().slice(0, 10);

@@ -32,8 +32,9 @@ export default function MasterTable({ videos }: { videos: VideoItem[] }) {
   return (
     <div className="bg-[#131b2e] border border-[#1e293b] rounded-xl overflow-hidden">
       {/* Header */}
-      <div className="grid grid-cols-[56px_1fr_140px_110px_120px_90px] gap-3 px-4 py-2.5 border-b border-[#1e293b] text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+      <div className="grid grid-cols-[56px_90px_1fr_140px_110px_120px_90px] gap-3 px-4 py-2.5 border-b border-[#1e293b] text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
         <span>Cover</span>
+        <span>Platform</span>
         <span>Caption</span>
         <span>Username</span>
         <span className="text-right">Views</span>
@@ -57,17 +58,35 @@ export default function MasterTable({ videos }: { videos: VideoItem[] }) {
                   height: ROW_HEIGHT,
                   transform: `translateY(${vRow.start}px)`,
                 }}
-                className="grid grid-cols-[56px_1fr_140px_110px_120px_90px] gap-3 px-4 items-center border-b border-slate-800/60 hover:bg-slate-800/20 transition-colors"
+                className="grid grid-cols-[56px_90px_1fr_140px_110px_120px_90px] gap-3 px-4 items-center border-b border-slate-800/60 hover:bg-slate-800/20 transition-colors"
               >
+                {/* Cover Image */}
                 {vid.coverUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={vid.coverUrl} alt="" className="w-9 h-12 object-cover rounded border border-slate-800" />
                 ) : (
                   <div className="w-9 h-12 rounded border border-slate-800 bg-slate-900" />
                 )}
+
+                {/* Platform Badge */}
+                <div>
+                  {vid.platform === "youtube" ? (
+                    <span className="inline-block rounded bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-400 border border-red-500/20">
+                      YouTube
+                    </span>
+                  ) : (
+                    <span className="inline-block rounded bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-400 border border-cyan-500/20">
+                      TikTok
+                    </span>
+                  )}
+                </div>
+
+                {/* Caption */}
                 <p className="text-xs text-slate-300 line-clamp-2 leading-snug min-w-0">
                   {vid.title || <span className="italic text-slate-600">(tanpa caption)</span>}
                 </p>
+
+                {/* Username */}
                 <a
                   href={vid.authorUrl}
                   target="_blank"
@@ -76,12 +95,18 @@ export default function MasterTable({ videos }: { videos: VideoItem[] }) {
                 >
                   @{vid.authorName}
                 </a>
+
+                {/* Views */}
                 <span className="text-xs font-semibold text-amber-400 text-right">
                   {formatFullNumber(vid.views)}
                 </span>
+
+                {/* Status */}
                 <span>
                   <StatusBadge status={vid.status} />
                 </span>
+
+                {/* Link */}
                 <a
                   href={vid.sourceUrl || vid.videoUrl}
                   target="_blank"

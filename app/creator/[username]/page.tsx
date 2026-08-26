@@ -34,6 +34,22 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
     );
   }, [allVideos, username]);
 
+  // Deteksi Platform Kreator Utama & URL Profil
+  const primaryPlatform = useMemo(() => {
+    const firstVideo = creatorVideos[0];
+    if (!firstVideo) return { name: "TikTok", profileUrl: `https://www.tiktok.com/@${username}` };
+
+    const isYouTube =
+      firstVideo.platform === "youtube" ||
+      firstVideo.sourceUrl?.includes("youtube") ||
+      firstVideo.sourceUrl?.includes("youtu.be");
+
+    return {
+      name: isYouTube ? "YouTube" : "TikTok",
+      profileUrl: firstVideo.authorUrl || (isYouTube ? `https://www.youtube.com` : `https://www.tiktok.com/@${username}`),
+    };
+  }, [creatorVideos, username]);
+
   // Hitung total engagement per kreator
   const stats = useMemo(() => {
     return creatorVideos.reduce(
@@ -82,12 +98,12 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
           </div>
 
           <a
-            href={`https://www.tiktok.com/@${username}`}
+            href={primaryPlatform.profileUrl}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold text-sm rounded-xl transition"
           >
-            Buka Profil TikTok <ExternalLink className="w-4 h-4" />
+            Buka Profil {primaryPlatform.name} <ExternalLink className="w-4 h-4" />
           </a>
         </div>
 
@@ -124,50 +140,58 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {creatorVideos.map((video) => (
-              <div
-                key={video.id || video.sourceUrl}
-                className="bg-[#131b2e] border border-[#1e293b] p-4 rounded-xl flex gap-4"
-              >
-                <div className="w-28 h-40 bg-slate-900 rounded-lg overflow-hidden flex-shrink-0 border border-slate-800 relative">
-                  {video.coverUrl ? (
-                    <img src={video.coverUrl} alt={video.title} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-xs text-slate-600">No Cover</div>
-                  )}
-                  <span className={`absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded ${
-                    video.status === "qualified" ? "bg-emerald-500/80 text-white" : "bg-rose-500/80 text-white"
-                  }`}>
-                    {video.status}
-                  </span>
-                </div>
+            {creatorVideos.map((video) => {
+              const isYouTube =
+                video.platform === "youtube" ||
+                video.sourceUrl?.includes("youtube") ||
+                video.sourceUrl?.includes("youtu.be");
+              const platformLabel = isYouTube ? "YouTube" : "TikTok";
 
-                <div className="flex-1 flex flex-col justify-between min-w-0">
-                  <div>
-                    <p className="text-sm font-semibold text-white line-clamp-2">
-                      {video.title || "(Tanpa Caption)"}
-                    </p>
-                    <p className="text-xs text-slate-400 mt-1">Diposting: {video.postedAt || "-"}</p>
+              return (
+                <div
+                  key={video.id || video.sourceUrl}
+                  className="bg-[#131b2e] border border-[#1e293b] p-4 rounded-xl flex gap-4"
+                >
+                  <div className="w-28 h-40 bg-slate-900 rounded-lg overflow-hidden flex-shrink-0 border border-slate-800 relative">
+                    {video.coverUrl ? (
+                      <img src={video.coverUrl} alt={video.title} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-xs text-slate-600">No Cover</div>
+                    )}
+                    <span className={`absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded ${
+                      video.status === "qualified" ? "bg-emerald-500/80 text-white" : "bg-rose-500/80 text-white"
+                    }`}>
+                      {video.status}
+                    </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs py-2 border-y border-slate-800/80 my-2">
-                    <span className="text-amber-400 font-semibold">👁 {formatFullNumber(video.views)}</span>
-                    <span className="text-rose-400 font-semibold">❤️ {formatFullNumber(video.likes)}</span>
-                    <span className="text-blue-400 font-semibold">💬 {formatFullNumber(video.comments)}</span>
-                    <span className="text-purple-400 font-semibold">🔁 {formatFullNumber(video.shares)}</span>
-                  </div>
+                  <div className="flex-1 flex flex-col justify-between min-w-0">
+                    <div>
+                      <p className="text-sm font-semibold text-white line-clamp-2">
+                        {video.title || "(Tanpa Caption)"}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">Diposting: {video.postedAt || "-"}</p>
+                    </div>
 
-                  <a
-                    href={video.videoUrl || video.sourceUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center justify-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-cyan-400 py-1.5 px-3 rounded-lg font-medium transition"
-                  >
-                    Tonton di TikTok <ExternalLink className="w-3 h-3" />
-                  </a>
+                    <div className="grid grid-cols-2 gap-2 text-xs py-2 border-y border-slate-800/80 my-2">
+                      <span className="text-amber-400 font-semibold">👁 {formatFullNumber(video.views)}</span>
+                      <span className="text-rose-400 font-semibold">❤️ {formatFullNumber(video.likes)}</span>
+                      <span className="text-blue-400 font-semibold">💬 {formatFullNumber(video.comments)}</span>
+                      <span className="text-purple-400 font-semibold">🔁 {formatFullNumber(video.shares)}</span>
+                    </div>
+
+                    <a
+                      href={video.videoUrl || video.sourceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center justify-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-cyan-400 py-1.5 px-3 rounded-lg font-medium transition"
+                    >
+                      Tonton di {platformLabel} <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

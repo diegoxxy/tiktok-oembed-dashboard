@@ -36,8 +36,10 @@ function parseUrlsFromText(text: string): string[] {
 }
 
 function makeErrorVideo(sourceUrl: string, message: string): VideoItem {
+  const isYouTube = sourceUrl.includes("youtube.com") || sourceUrl.includes("youtu.be");
   return {
     id: sourceUrl,
+    platform: isYouTube ? "youtube" : "tiktok",
     sourceUrl,
     videoUrl: sourceUrl,
     title: "Gagal Memuat Video",
@@ -51,19 +53,18 @@ function makeErrorVideo(sourceUrl: string, message: string): VideoItem {
     comments: 0,
     shares: 0,
     saves: 0,
-    postedAt: "",
+    postedAt: "-",
     status: "error",
     errorMessage: message,
-  } as VideoItem;
+  };
 }
 
 export default function Home() {
   const [targetHashtag, setTargetHashtag] = useState("");
   const [urlsInput, setUrlsInput] = useState("");
-  const [importInfo] = useState("");
 
   const [loading, setLoading] = useState(false);
-  const [, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   const [allVideos, setAllVideos] = useState<VideoItem[]>([]);
 
@@ -132,8 +133,8 @@ export default function Home() {
           collectedVideos.push(...data.videos);
           toCache.push(...data.videos.map((v) => ({ sourceUrl: v.sourceUrl, video: v })));
         }
-      } catch {
-        const errored = chunk.map((u: string) => makeErrorVideo(u, "Gagal menghubungi server"));
+      } catch (err: any) {
+        const errored = chunk.map((u: string) => makeErrorVideo(u, err.message || "Gagal menghubungi server"));
         setAllVideos((prev) => [...prev, ...errored]);
         collectedVideos.push(...errored);
       }
@@ -148,6 +149,7 @@ export default function Home() {
     localStorage.setItem("tiktok_analytics_last_scan", JSON.stringify(collectedVideos));
 
     setLoading(false);
+    setProgress(null);
   }
 
   const globalMetrics = useMemo(() => computeGlobalMetrics(allVideos), [allVideos]);
@@ -191,10 +193,10 @@ export default function Home() {
               Bola Mata Currency Analytics
             </div>
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">
-              TikTok Campaign Analytics Dashboard
+              TikTok & YouTube Campaign Analytics Dashboard
             </h1>
             <p className="text-sm text-slate-400 mt-1">
-              Verifikasi, agregasi, dan analisis performa kampanye — siap untuk 1.000+ link.
+              Verifikasi, agregasi, dan analisis performa kampanye multi-platform.
             </p>
           </div>
         </header>
@@ -213,9 +215,10 @@ export default function Home() {
           }}
         />
 
-        {importInfo && (
-          <div className="text-xs text-cyan-400 bg-cyan-950/30 border border-cyan-800/50 p-3 rounded-lg">
-            {importInfo}
+        {loading && progress && (
+          <div className="text-xs text-cyan-400 bg-cyan-950/30 border border-cyan-800/50 p-3 rounded-lg flex justify-between items-center">
+            <span>Memproses analisis link...</span>
+            <span className="font-mono font-bold">{progress.done} / {progress.total} link</span>
           </div>
         )}
 

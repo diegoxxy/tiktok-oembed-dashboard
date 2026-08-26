@@ -10,7 +10,7 @@ export function exportResultToPdf(result: AnalysisResult) {
   // Header Title
   doc.setFontSize(16);
   doc.setFont("helvetica", "bold");
-  doc.text("Laporan Ringkasan & Detail Kampanye TikTok", 14, 15);
+  doc.text("Laporan Ringkasan & Detail Kampanye Video", 14, 15);
 
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
@@ -70,8 +70,9 @@ export function exportResultToPdf(result: AnalysisResult) {
 
   autoTable(doc, {
     startY: 20,
-    head: [["Posting Date", "Creator", "Status", "Views", "Likes", "Comments", "Shares", "Saves", "Link Video"]],
+    head: [["Platform", "Posting Date", "Creator", "Status", "Views", "Likes", "Comments", "Shares", "Link Video"]],
     body: allVideos.map((v) => [
+      v.platform ? v.platform.toUpperCase() : "TIKTOK",
       v.postedAt || "-",
       `@${v.authorName}`,
       v.status.toUpperCase(),
@@ -79,15 +80,14 @@ export function exportResultToPdf(result: AnalysisResult) {
       (v.likes || 0).toLocaleString("id-ID"),
       (v.comments || 0).toLocaleString("id-ID"),
       (v.shares || 0).toLocaleString("id-ID"),
-      (v.saves || 0).toLocaleString("id-ID"),
       v.sourceUrl || v.videoUrl,
     ]),
     styles: { fontSize: 7 },
     headStyles: { fillColor: [15, 23, 42] },
     columnStyles: {
-      8: { cellWidth: 45 },
+      8: { cellWidth: 40 },
     },
   });
 
-  doc.save(`TikTok-Campaign-Report-${Date.now()}.pdf`);
+  doc.save(`Campaign-Report-${Date.now()}.pdf`);
 }
