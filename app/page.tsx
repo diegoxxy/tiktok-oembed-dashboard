@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import type {
   CreatorSortKey,
   StatusFilter,
@@ -10,7 +10,7 @@ import type {
   ViewMode,
 } from "@/lib/tiktok/types";
 import { chunkArray } from "@/lib/tiktok/chunk";
-import { setManyInCache, clearCache } from "@/lib/tiktok/cache";
+import { setManyInCache } from "@/lib/tiktok/cache";
 import { exportResultToExcel } from "@/lib/tiktok/exportExcel";
 import { exportResultToPdf } from "@/lib/tiktok/exportPdf";
 import { computeGlobalMetrics, groupVideosByCreator } from "@/lib/tiktok/aggregate";
@@ -55,7 +55,7 @@ function makeErrorVideo(sourceUrl: string, message: string): VideoItem {
 export default function Home() {
   const [targetHashtag, setTargetHashtag] = useState("");
   const [urlsInput, setUrlsInput] = useState("");
-  const [importInfo, setImportInfo] = useState("");
+  const [importInfo] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [, setProgress] = useState<{ done: number; total: number } | null>(null);
@@ -70,6 +70,26 @@ export default function Home() {
   const [creatorSort, setCreatorSort] = useState<CreatorSortKey>("creator_views_desc");
   const [selectedCreatorName, setSelectedCreatorName] = useState<string | null>(null);
 
+  // MEMBACA SESI HASHING & VIDEO TERAKHIR SAAT DASHBOARD DIBUKA
+  useEffect(() => {
+    const cachedVideos = localStorage.getItem("tiktok_analytics_last_scan");
+    const cachedHashtag = localStorage.getItem("tiktok_analytics_last_hashtag");
+    const cachedUrls = localStorage.getItem("tiktok_analytics_last_urls");
+
+    if (cachedVideos) {
+      try {
+        const parsed = JSON.parse(cachedVideos);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setAllVideos(parsed);
+        }
+      } catch (e) {
+        console.error("Gagal memuat cache dashboard:", e);
+      }
+    }
+    if (cachedHashtag) setTargetHashtag(cachedHashtag);
+    if (cachedUrls) setUrlsInput(cachedUrls);
+  }, []);
+
   async function handleScan() {
     if (!targetHashtag.trim() || !urlsInput.trim()) return;
 
@@ -79,8 +99,13 @@ export default function Home() {
     const cleanHashtag = targetHashtag.replace(/^#/, "").trim();
     const urls = parseUrlsFromText(urlsInput);
 
+    // Simpan input hashtag & URLs ke localStorage
+    localStorage.setItem("tiktok_analytics_last_hashtag", targetHashtag);
+    localStorage.setItem("tiktok_analytics_last_urls", urlsInput);
+
     const chunks = chunkArray(urls, 10);
     const toCache: { sourceUrl: string; video: VideoItem }[] = [];
+    const collectedVideos: VideoItem[] = [];
 
     setProgress({ done: 0, total: urls.length });
 
@@ -101,11 +126,13 @@ export default function Home() {
 
         if (data.videos) {
           setAllVideos((prev) => [...prev, ...data.videos]);
+          collectedVideos.push(...data.videos);
           toCache.push(...data.videos.map((v) => ({ sourceUrl: v.sourceUrl, video: v })));
         }
       } catch {
         const errored = chunk.map((u: string) => makeErrorVideo(u, "Gagal menghubungi server"));
         setAllVideos((prev) => [...prev, ...errored]);
+        collectedVideos.push(...errored);
       }
 
       setProgress((prev) => (prev ? { ...prev, done: Math.min(prev.total, prev.done + chunk.length) } : null));
@@ -114,6 +141,9 @@ export default function Home() {
     if (toCache.length > 0) {
       await setManyInCache(toCache);
     }
+
+    // SIMPAN HASIL SCAN BARU KE LOCALSTORAGE
+    localStorage.setItem("tiktok_analytics_last_scan", JSON.stringify(collectedVideos));
 
     setLoading(false);
   }

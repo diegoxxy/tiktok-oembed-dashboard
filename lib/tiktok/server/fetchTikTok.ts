@@ -1,167 +1,73 @@
-import type { VideoItem } from "../types";
+import type { VideoItem } from "@/lib/tiktok/types";
 
-const DESKTOP_UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
-
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/** Ubah shortlink vt.tiktok.com / vm.tiktok.com jadi URL desktop penuh. */
-async function resolveTikTokUrl(url: string): Promise<string> {
-  const cleanUrl = url.trim();
-  if (!cleanUrl.includes("vt.tiktok.com") && !cleanUrl.includes("vm.tiktok.com")) {
-    return cleanUrl;
-  }
+export async function fetchTikTokDataWithRetry(
+  resolvedUrl: string,
+  cleanHashtag: string
+): Promise<VideoItem> {
   try {
-    const res = await fetch(cleanUrl, {
-      method: "HEAD",
-      redirect: "follow",
-      headers: { "User-Agent": DESKTOP_UA },
-    });
-    return res.url || cleanUrl;
-  } catch {
-    return cleanUrl;
-  }
-}
-
-interface RawFetchOutcome {
-  ok: boolean;
-  rateLimited?: boolean;
-  data?: Omit<VideoItem, "sourceUrl" | "status" | "errorMessage">;
-  errorMessage?: string;
-}
-
-/** Satu percobaan fetch — tanpa retry. */
-async function fetchTikTokOnce(rawUrl: string): Promise<RawFetchOutcome> {
-  const fullUrl = await resolveTikTokUrl(rawUrl);
-
-  // Cara 1: TikWM (biasanya sudah termasuk play_count & avatar kreator).
-  try {
-    const tikwmRes = await fetch("https://www.tikwm.com/api/", {
-      method: "POST",
+    const apiUrl = `https://www.tikwm.com/api/?url=${encodeURIComponent(resolvedUrl)}`;
+    const res = await fetch(apiUrl, {
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       },
-      body: new URLSearchParams({ url: fullUrl, hd: "1" }),
       cache: "no-store",
     });
 
-    if (tikwmRes.status === 429) {
-      return { ok: false, rateLimited: true, errorMessage: "Rate limited oleh TikWM" };
+    if (!res.ok) {
+      return makeErrorVideo(resolvedUrl, `HTTP error ${res.status}`);
     }
 
-    if (tikwmRes.ok) {
-      const resData = await tikwmRes.json();
-      if (resData.code === 0 && resData.data) {
-        const data = resData.data;
-        const username = (data.author?.unique_id || data.author?.nickname || "unknown").toLowerCase();
-        return {
-          ok: true,
-          data: {
-            id: String(data.id || fullUrl),
-            title: data.title || "",
-            authorName: username,
-            authorDisplayName: data.author?.nickname || username,
-            authorUrl: `https://www.tiktok.com/@${username}`,
-            authorAvatar: data.author?.avatar || "",
-            coverUrl: data.cover || data.origin_cover || "",
-            videoUrl: fullUrl,
-            views: Number(data.play_count) || 0,
-          },
-        };
-      }
-      // TikWM merespons tapi videonya tidak valid (private/dihapus/dsb).
-      if (resData.msg) {
-        return { ok: false, errorMessage: String(resData.msg) };
-      }
+    const json = await res.json();
+    if (json.code !== 0 || !json.data) {
+      return makeErrorVideo(resolvedUrl, json.msg || "Video tidak ditemukan atau private");
     }
-  } catch {
-    // lanjut ke fallback
-  }
 
-  // Cara 2: oEmbed resmi TikTok + scraping HTML untuk playCount.
-  try {
-    const oembedRes = await fetch(`https://www.tiktok.com/oembed?url=${encodeURIComponent(fullUrl)}`);
-    if (!oembedRes.ok) {
-      return { ok: false, errorMessage: "Video tidak ditemukan / privat (oEmbed gagal)" };
-    }
-    const oembedData = await oembedRes.json();
+    const data = json.data;
 
-    let playCount = 0;
-    try {
-      const htmlRes = await fetch(fullUrl, {
-        headers: { "User-Agent": DESKTOP_UA, "Accept-Language": "en-US,en;q=0.9" },
+    // Ekstraksi Hashtag dari Deskripsi/Title
+    const titleText = (data.title || "").toLowerCase();
+    const isHashtagMatch = titleText.includes(`#${cleanHashtag}`);
+
+    // Parsing Posting Date
+    let formattedDate = "-";
+    if (data.create_time) {
+      const dateObj = new Date(data.create_time * 1000);
+      formattedDate = dateObj.toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
       });
-      if (htmlRes.ok) {
-        const htmlText = await htmlRes.text();
-        const match =
-          htmlText.match(/"playCount":\s*(\d+)/) ||
-          htmlText.match(/"play_count":\s*(\d+)/) ||
-          htmlText.match(/"viewsCount":\s*(\d+)/);
-        if (match?.[1]) playCount = parseInt(match[1], 10);
-      }
-    } catch {
-      playCount = 0;
     }
-
-    const urlMatch = fullUrl.match(/@([^/]+)/);
-    const extractedUsername = urlMatch
-      ? urlMatch[1].toLowerCase()
-      : (oembedData.author_name || "unknown").toLowerCase();
 
     return {
-      ok: true,
-      data: {
-        id: String(oembedData.embed_product_id || fullUrl),
-        title: oembedData.title || "",
-        authorName: extractedUsername,
-        authorDisplayName: oembedData.author_name || extractedUsername,
-        authorUrl: oembedData.author_url || `https://www.tiktok.com/@${extractedUsername}`,
-        authorAvatar: "",
-        coverUrl: oembedData.thumbnail_url || "",
-        videoUrl: fullUrl,
-        views: playCount,
-      },
+      id: data.id || resolvedUrl,
+      sourceUrl: resolvedUrl,
+      videoUrl: data.play || resolvedUrl,
+      title: data.title || "",
+      authorName: data.author?.unique_id || "unknown",
+      authorDisplayName: data.author?.nickname || "unknown",
+      authorUrl: `https://www.tiktok.com/@${data.author?.unique_id || ""}`,
+      authorAvatar: data.author?.avatar || "",
+      coverUrl: data.cover || "",
+      views: Number(data.play_count || 0),
+
+      // Binding data engagement tambahan
+      likes: Number(data.digg_count || 0),
+      comments: Number(data.comment_count || 0),
+      shares: Number(data.share_count || 0),
+      saves: Number(data.collect_count || 0),
+      postedAt: formattedDate,
+
+      status: isHashtagMatch ? "qualified" : "unqualified",
     };
-  } catch {
-    return { ok: false, errorMessage: "Gagal mengambil data dari TikTok" };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Gagal mengambil data";
+    return makeErrorVideo(resolvedUrl, msg);
   }
 }
 
-/**
- * Fetch dengan retry (maks 2x ulang, backoff singkat) — sesuai spec
- * "Asynchronous Queue & Retry Mechanism". Selalu mengembalikan VideoItem,
- * tidak pernah null, supaya video yang gagal tetap terlihat statusnya
- * di UI (Error/Private) alih-alih hilang diam-diam.
- */
-export async function fetchTikTokDataWithRetry(
-  sourceUrl: string,
-  targetHashtagLower: string,
-  maxRetries = 2
-): Promise<VideoItem> {
-  let lastError = "Gagal memproses URL";
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const outcome = await fetchTikTokOnce(sourceUrl);
-
-    if (outcome.ok && outcome.data) {
-      const isQualified = outcome.data.title.toLowerCase().includes(`#${targetHashtagLower}`);
-      return {
-        ...outcome.data,
-        sourceUrl,
-        status: isQualified ? "qualified" : "unqualified",
-      };
-    }
-
-    lastError = outcome.errorMessage || lastError;
-
-    if (attempt < maxRetries) {
-      await delay(outcome.rateLimited ? 800 * (attempt + 1) : 350);
-    }
-  }
-
+function makeErrorVideo(sourceUrl: string, message: string): VideoItem {
   return {
     id: sourceUrl,
     sourceUrl,
@@ -173,7 +79,12 @@ export async function fetchTikTokDataWithRetry(
     authorAvatar: "",
     coverUrl: "",
     views: 0,
+    likes: 0,
+    comments: 0,
+    shares: 0,
+    saves: 0,
+    postedAt: "-",
     status: "error",
-    errorMessage: lastError,
+    errorMessage: message,
   };
 }

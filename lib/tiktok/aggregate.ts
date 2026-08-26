@@ -1,31 +1,23 @@
 import type { CreatorGroup, GlobalMetrics, VideoItem } from "./types";
 import { normalizeUsername } from "./format";
 
-/**
- * Video hasil cache bisa berasal dari scan dengan hashtag target yang berbeda.
- * Status qualified/unqualified selalu dihitung ULANG di klien terhadap hashtag
- * yang aktif SEKARANG, supaya ganti hashtag lalu scan ulang tetap akurat tanpa
- * perlu fetch ulang ke TikTok. Status "error" (gagal fetch) tidak diubah.
- */
 export function applyHashtagStatus(video: VideoItem, hashtagLower: string): VideoItem {
   if (video.status === "error") return video;
   const isQualified = video.title.toLowerCase().includes(`#${hashtagLower}`);
   return { ...video, status: isQualified ? "qualified" : "unqualified" };
 }
 
-/**
- * KPI ribbon dihitung dari SELURUH data (tidak terpengaruh search/filter aktif) —
- * ini "kebenaran" performa kampanye. "Total Campaign Views" & top creator/video
- * dihitung dari video yang QUALIFIED, karena itulah konten yang benar-benar
- * memenuhi syarat kampanye dan pantas dihitung sebagai performa kampanye.
- */
 export function computeGlobalMetrics(allVideos: VideoItem[]): GlobalMetrics {
   const totalSubmitted = allVideos.length;
   const qualified = allVideos.filter((v) => v.status === "qualified");
   const unqualified = allVideos.filter((v) => v.status === "unqualified");
   const errored = allVideos.filter((v) => v.status === "error");
 
-  const totalViews = qualified.reduce((acc, v) => acc + v.views, 0);
+  const totalViews = qualified.reduce((acc, v) => acc + (v.views || 0), 0);
+  const totalLikes = qualified.reduce((acc, v) => acc + (v.likes || 0), 0);
+  const totalComments = qualified.reduce((acc, v) => acc + (v.comments || 0), 0);
+  const totalShares = qualified.reduce((acc, v) => acc + (v.shares || 0), 0);
+  const totalSaves = qualified.reduce((acc, v) => acc + (v.saves || 0), 0);
 
   const creatorViewMap = new Map<string, { authorName: string; authorDisplayName: string; totalViews: number }>();
   for (const v of qualified) {
@@ -61,16 +53,16 @@ export function computeGlobalMetrics(allVideos: VideoItem[]): GlobalMetrics {
     totalError: errored.length,
     qualifiedRate: totalSubmitted > 0 ? (qualified.length / totalSubmitted) * 100 : 0,
     totalViews,
+    totalLikes,
+    totalComments,
+    totalShares,
+    totalSaves,
     totalCreators: creatorViewMap.size,
     topCreator,
     topVideo,
   };
 }
 
-/**
- * Kelompokkan video (yang sudah difilter oleh Toolbar) per username.
- * Dipakai oleh Folder View — jadi berubah mengikuti filter/search aktif.
- */
 export function groupVideosByCreator(videos: VideoItem[]): CreatorGroup[] {
   const map = new Map<string, CreatorGroup>();
 
@@ -84,6 +76,10 @@ export function groupVideosByCreator(videos: VideoItem[]): CreatorGroup[] {
         authorUrl: v.authorUrl,
         authorAvatar: v.authorAvatar,
         totalViews: 0,
+        totalLikes: 0,
+        totalComments: 0,
+        totalShares: 0,
+        totalSaves: 0,
         videoCount: 0,
         qualifiedCount: 0,
         isTopCreator: false,
@@ -93,7 +89,12 @@ export function groupVideosByCreator(videos: VideoItem[]): CreatorGroup[] {
     }
     group.videos.push(v);
     group.videoCount += 1;
-    group.totalViews += v.views;
+    group.totalViews += v.views || 0;
+    group.totalLikes += v.likes || 0;
+    group.totalComments += v.comments || 0;
+    group.totalShares += v.shares || 0;
+    group.totalSaves += v.saves || 0;
+
     if (v.status === "qualified") group.qualifiedCount += 1;
     if (!group.authorAvatar && v.authorAvatar) group.authorAvatar = v.authorAvatar;
   }

@@ -4,9 +4,10 @@ import type { TikTokBatchRequest, TikTokBatchResponse } from "@/lib/tiktok/types
 
 const MAX_BATCH_SIZE = 30;
 
-// Resolver shortlink dengan Browser User-Agent agar tidak diblokir TikTok
 async function resolveTikTokUrl(url: string): Promise<string> {
   const trimmedUrl = url.trim();
+  if (!trimmedUrl) return "";
+  
   if (trimmedUrl.includes("vt.tiktok.com") || trimmedUrl.includes("vm.tiktok.com")) {
     try {
       const response = await fetch(trimmedUrl, {
@@ -44,22 +45,22 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!targetHashtag) {
+    if (!targetHashtag || !targetHashtag.trim()) {
       return NextResponse.json({ error: "Hashtag target tidak boleh kosong" }, { status: 400 });
     }
 
     const cleanHashtag = targetHashtag.toLowerCase().replace("#", "").trim();
+    const validUrls = videoUrls.map((u) => u.trim()).filter(Boolean);
 
-    // Memproses URL secara sekuensial dengan jeda 1.2 detik (1200ms) untuk menghindari Rate Limit TikTok (1 req/sec)
     const videos = [];
-    for (let i = 0; i < videoUrls.length; i++) {
-      const originalUrl = videoUrls[i];
+    for (let i = 0; i < validUrls.length; i++) {
+      const originalUrl = validUrls[i];
       const resolvedUrl = await resolveTikTokUrl(originalUrl);
-      
+
       const videoData = await fetchTikTokDataWithRetry(resolvedUrl, cleanHashtag);
       videos.push(videoData);
 
-      if (i < videoUrls.length - 1) {
+      if (i < validUrls.length - 1) {
         await delay(1200);
       }
     }

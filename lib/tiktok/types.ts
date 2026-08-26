@@ -1,11 +1,8 @@
 export type VideoStatus = "qualified" | "unqualified" | "error";
 
 export interface VideoItem {
-  /** TikTok's own video id when known, otherwise the resolved URL */
   id: string;
-  /** Original string the user submitted (import row / pasted line) */
   sourceUrl: string;
-  /** Fully resolved desktop URL (shortlinks like vt.tiktok.com expanded) */
   videoUrl: string;
   title: string;
   authorName: string;
@@ -14,6 +11,11 @@ export interface VideoItem {
   authorAvatar: string;
   coverUrl: string;
   views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saves: number;
+  postedAt: string;
   status: VideoStatus;
   errorMessage?: string;
 }
@@ -24,6 +26,10 @@ export interface CreatorGroup {
   authorUrl: string;
   authorAvatar: string;
   totalViews: number;
+  totalLikes: number;
+  totalComments: number;
+  totalShares: number;
+  totalSaves: number;
   videoCount: number;
   qualifiedCount: number;
   isTopCreator: boolean;
@@ -37,6 +43,10 @@ export interface GlobalMetrics {
   totalError: number;
   qualifiedRate: number;
   totalViews: number;
+  totalLikes: number;
+  totalComments: number;
+  totalShares: number;
+  totalSaves: number;
   totalCreators: number;
   topCreator: { authorName: string; authorDisplayName: string; totalViews: number } | null;
   topVideo: { title: string; authorName: string; views: number; videoUrl: string } | null;
@@ -50,18 +60,14 @@ export interface AnalysisResult {
 }
 
 export type StatusFilter = "all" | VideoStatus;
-
 export type ViewMode = "folder" | "table";
-
 export type VideoSortKey = "views_desc" | "views_asc";
-
 export type CreatorSortKey =
   | "creator_views_desc"
   | "creator_views_asc"
   | "creator_count_desc"
   | "creator_alpha_asc";
 
-/** Request body sent to /api/tiktok — one chunk of URLs at a time. */
 export interface TikTokBatchRequest {
   videoUrls: string[];
   targetHashtag: string;
