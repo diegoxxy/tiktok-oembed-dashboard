@@ -22,14 +22,8 @@ import Toolbar from "@/components/tiktok/Toolbar";
 import FolderView from "@/components/tiktok/FolderView";
 import MasterTable from "@/components/tiktok/MasterTable";
 
-/**
- * Helper delay untuk menghindari pembatasan Rate Limit API
- */
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/**
- * Memisahkan baris teks menjadi daftar URL yang unik dan bersih.
- */
 function parseUrlsFromText(text: string): string[] {
   const seen = new Set<string>();
   const urls: string[] = [];
@@ -42,9 +36,6 @@ function parseUrlsFromText(text: string): string[] {
   return urls;
 }
 
-/**
- * Membuat data VideoItem fallback untuk video yang gagal di-fetch / error.
- */
 function makeErrorVideo(sourceUrl: string, message: string): VideoItem {
   const isYouTube = sourceUrl.includes("youtube.com") || sourceUrl.includes("youtu.be");
   return {
@@ -85,7 +76,6 @@ export default function Home() {
   const [videoSort, setVideoSort] = useState<VideoSortKey>("views_desc");
   const [creatorSort, setCreatorSort] = useState<CreatorSortKey>("creator_views_desc");
 
-  // Memuat data hasil scan terakhir dari cache
   useEffect(() => {
     const cachedVideos = localStorage.getItem("tiktok_analytics_last_scan");
 
@@ -101,9 +91,6 @@ export default function Home() {
     }
   }, []);
 
-  /**
-   * Menjalankan Pemindaian Batch untuk seluruh URL di input panel
-   */
   async function handleScan() {
     if (!targetHashtag.trim() || !urlsInput.trim()) return;
 
@@ -122,7 +109,6 @@ export default function Home() {
     for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
       const chunk = chunks[chunkIndex];
 
-      // Jeda 1.2 detik tiap batch (kecuali batch pertama) untuk menekan Rate-Limit
       if (chunkIndex > 0) {
         await delay(1200);
       }
@@ -165,9 +151,6 @@ export default function Home() {
     setProgress(null);
   }
 
-  /**
-   * Reset seluruh dashboard dan menghapus cache lokal
-   */
   function handleReset() {
     setAllVideos([]);
     setTargetHashtag("");
@@ -193,12 +176,9 @@ export default function Home() {
     [filteredVideos, videoSort]
   );
 
-  // Mengurutkan dan memfilter kreator utama (Menyaring folder 'unknown')
+  // Folder @unknown tetap dimasukkan agar dapat diakses oleh user
   const creatorsForFolder = useMemo(
-    () =>
-      sortCreators(groupVideosByCreator(filteredVideos), creatorSort).filter(
-        (creator) => creator.authorName.toLowerCase() !== "unknown"
-      ),
+    () => sortCreators(groupVideosByCreator(filteredVideos), creatorSort),
     [filteredVideos, creatorSort]
   );
 
