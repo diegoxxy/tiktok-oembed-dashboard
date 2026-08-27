@@ -113,56 +113,74 @@ export async function POST(request: Request) {
       const isYouTube =
         originalInputUrl.includes("youtube.com") || originalInputUrl.includes("youtu.be");
       let videoData: VideoItem | null = null;
+      let attempts = 0;
+      const maxAttempts = 2; // Batas coba ulang jika terbentur rate limit
 
-      try {
-        if (isYouTube) {
-          const { cleanUrl } = sanitizeAndNormalizeUrl(originalInputUrl);
-          videoData = await fetchYouTubeData(cleanUrl, cleanHashtag);
-          if (videoData) {
-            videoData.sourceUrl = originalInputUrl;
-          }
-        } else {
-          const resolvedUrl = await resolveTikTokUrl(originalInputUrl);
-          videoData = await fetchTikTokDataWithRetry(resolvedUrl, cleanHashtag);
-
-          if (videoData) {
-            videoData.platform = "tiktok";
-            videoData.sourceUrl = originalInputUrl;
+      while (attempts < maxAttempts) {
+        try {
+          if (isYouTube) {
+            const { cleanUrl } = sanitizeAndNormalizeUrl(originalInputUrl);
+            videoData = await fetchYouTubeData(cleanUrl, cleanHashtag);
+            if (videoData) {
+              videoData.sourceUrl = originalInputUrl;
+            }
           } else {
-            throw new Error("Data video kosong / Private / Terblokir Rate Limit");
+            const resolvedUrl = await resolveTikTokUrl(originalInputUrl);
+            videoData = await fetchTikTokDataWithRetry(resolvedUrl, cleanHashtag);
+
+            if (videoData) {
+              videoData.platform = "tiktok";
+              videoData.sourceUrl = originalInputUrl;
+            } else {
+              throw new Error("Data video kosong / Private");
+            }
           }
+          break; // Sukses, keluar dari loop retry
+        } catch (err) {
+          attempts++;
+          const errMessage = err instanceof Error ? err.message : "";
+          const isRateLimit =
+            errMessage.includes("403") ||
+            errMessage.includes("429") ||
+            errMessage.toLowerCase().includes("limit");
+
+          // Jika terbentur rate limit (403/429), beri jeda ekstra 2.5 detik lalu coba lagi
+          if (isRateLimit && attempts < maxAttempts) {
+            await delay(2500);
+            continue;
+          }
+
+          // Fallback jika tetap gagal setelah diproses/retry
+          videoData = {
+            id: originalInputUrl,
+            platform: isYouTube ? "youtube" : "tiktok",
+            sourceUrl: originalInputUrl,
+            videoUrl: originalInputUrl,
+            title: "Gagal Memuat Video (Rate Limit API / Private)",
+            authorName: "unknown",
+            authorDisplayName: "Unknown / Error",
+            authorUrl: "",
+            authorAvatar: "",
+            coverUrl: "",
+            views: 0,
+            likes: 0,
+            comments: 0,
+            shares: 0,
+            saves: 0,
+            postedAt: "-",
+            status: "error",
+            errorMessage: err instanceof Error ? err.message : "Gagal memuat metadata video",
+          };
         }
-      } catch (err) {
-        // Fallback untuk error video (masuk ke kategori unknown/error)
-        videoData = {
-          id: originalInputUrl,
-          platform: isYouTube ? "youtube" : "tiktok",
-          sourceUrl: originalInputUrl,
-          videoUrl: originalInputUrl,
-          title: "Gagal Memuat Video (Private / Shortlink Error / Limit API)",
-          authorName: "unknown",
-          authorDisplayName: "Unknown / Error",
-          authorUrl: "",
-          authorAvatar: "",
-          coverUrl: "",
-          views: 0,
-          likes: 0,
-          comments: 0,
-          shares: 0,
-          saves: 0,
-          postedAt: "-",
-          status: "error",
-          errorMessage: err instanceof Error ? err.message : "Gagal memuat metadata video",
-        };
       }
 
       if (videoData) {
         videos.push(videoData);
       }
 
-      // Jeda antarektraksi untuk mencegah rate limit dari TikTok/YouTube
+      // Jeda aman 1.25 detik antarekstraksi untuk mematuhi aturan 1 req/sec
       if (i < videoUrls.length - 1) {
-        await delay(500);
+        await delay(1250);
       }
     }
 
