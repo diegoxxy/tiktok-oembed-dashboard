@@ -8,7 +8,7 @@ export interface InstagramClientMetric {
 }
 
 /**
- * Fetch metadata Instagram langsung dari browser pengguna
+ * Fetch metadata Instagram langsung dari DOM Iframe / oEmbed resmi
  */
 export async function fetchInstagramDataClient(url: string): Promise<InstagramClientMetric | null> {
   const match = url.match(/\/(?:p|reel|reels)\/([A-Za-z0-9_-]+)/);
@@ -17,60 +17,49 @@ export async function fetchInstagramDataClient(url: string): Promise<InstagramCl
 
   const targetUrl = `https://www.instagram.com/p/${shortcode}/`;
 
-  // 1. Coba lewat Proxy HTML AllOrigins
-  try {
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
-    const res = await fetch(proxyUrl, { cache: "no-store" });
+  // 1. Ekstraksi via JSONP Script Tag ke Instagram oEmbed (Bypass CORS)
+  const dataFromOembed = await new Promise<any>((resolve) => {
+    const callbackName = `jsonp_ig_${shortcode.replace(/[^a-zA-Z0-9]/g, "_")}_${Date.now()}`;
+    const script = document.createElement("script");
 
-    if (res.ok) {
-      const data = await res.json();
-      const html = data.contents;
+    const cleanup = () => {
+      if (script.parentNode) script.parentNode.removeChild(script);
+      delete (window as any)[callbackName];
+    };
 
-      if (html && typeof html === "string") {
-        let username = "";
-        let caption = `Instagram Reel (${shortcode})`;
-        let thumbnail = "";
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve(null);
+    }, 5000);
 
-        const ogTitleMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]*)"/i);
-        if (ogTitleMatch) {
-          const rawTitle = ogTitleMatch[1];
-          caption = rawTitle;
+    (window as any)[callbackName] = (data: any) => {
+      clearTimeout(timer);
+      cleanup();
+      resolve(data);
+    };
 
-          const userMatch = rawTitle.match(/@([a-zA-Z0-9_.]+)/) || rawTitle.match(/^([^•:(]+)/);
-          if (userMatch) {
-            username = userMatch[1].replace(/[^a-zA-Z0-9_.]/g, "").toLowerCase().trim();
-          }
-        }
+    script.src = `https://api.instagram.com/oembed/?url=${encodeURIComponent(targetUrl)}&callback=${callbackName}`;
+    script.onerror = () => {
+      clearTimeout(timer);
+      cleanup();
+      resolve(null);
+    };
 
-        const ogImageMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]*)"/i);
-        if (ogImageMatch) {
-          thumbnail = ogImageMatch[1].replace(/&amp;/g, "&");
-        }
+    document.body.appendChild(script);
+  });
 
-        if (username) {
-          return {
-            username,
-            caption,
-            views: 0,
-            likes: 0,
-            comments: 0,
-            thumbnail,
-          };
-        }
-      }
-    }
-  } catch (err) {
-    console.warn("Client fallback scraping via AllOrigins failed:", err);
+  if (dataFromOembed && dataFromOembed.author_name) {
+    const username = dataFromOembed.author_name.toLowerCase().trim();
+    return {
+      username,
+      caption: dataFromOembed.title || `Instagram Reel (${shortcode})`,
+      views: 0,
+      likes: 0,
+      comments: 0,
+      thumbnail: dataFromOembed.thumbnail_url || "",
+    };
   }
 
-  // 2. Fallback Ultimate: Ekstrak minimal dari URL agar tidak menjadi 'unknown'
-  // Jika Instagram memblokir scraping, set setidaknya ID Shortcode sebagai identitas
-  return {
-    username: `ig_post_${shortcode.slice(0, 6)}`,
-    caption: `Instagram Reel (${shortcode})`,
-    views: 0,
-    likes: 0,
-    comments: 0,
-    thumbnail: "",
-  };
+  // 2. Jika JSONP gagal, kembalikan null agar ditangani UI / fallback khusus
+  return null;
 }
