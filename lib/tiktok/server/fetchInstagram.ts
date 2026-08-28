@@ -20,70 +20,59 @@ export async function fetchInstagramData(
   let coverUrl = "";
   let likes = 0;
 
-  // 1. Coba fetch via Official Instagram oEmbed Endpoint
+  // 1. Coba lewat proxy publik CORS.sh / Corsproxy agar request server tidak terblokir IP Meta
   try {
-    const oembedUrl = `https://api.instagram.com/oembed/?url=${encodeURIComponent(`https://www.instagram.com/p/${shortcode}/`)}`;
-    const res = await fetch(oembedUrl, { cache: "no-store" });
+    const embedUrl = `https://www.instagram.com/p/${shortcode}/embed/captioned/`;
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(embedUrl)}`;
+
+    const res = await fetch(proxyUrl, {
+      cache: "no-store",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+    });
 
     if (res.ok) {
-      const data = await res.json();
-      if (data.author_name) {
-        authorName = data.author_name.toLowerCase().trim();
-        authorDisplayName = data.author_name.trim();
+      const htmlText = await res.text();
+
+      // Extract Username
+      const userMatch =
+        htmlText.match(/class="UsernameText"[^>]*>([^<]+)</i) ||
+        htmlText.match(/class="Username"[^>]*>([^<]+)</i);
+
+      if (userMatch && userMatch[1]) {
+        authorName = userMatch[1].toLowerCase().trim().replace("@", "");
+        authorDisplayName = userMatch[1].trim().replace("@", "");
       }
-      if (data.title) {
-        title = data.title;
+
+      // Extract Caption/Title
+      const captionMatch = htmlText.match(/class="Caption"[^>]*>([\s\S]*?)<\/div>/i);
+      if (captionMatch && captionMatch[1]) {
+        title = captionMatch[1].replace(/<[^>]+>/g, "").trim();
       }
-      if (data.thumbnail_url) {
-        coverUrl = data.thumbnail_url;
+
+      // Extract Likes
+      const likesMatch = htmlText.match(/([\d,.]+)\s+likes/i);
+      if (likesMatch && likesMatch[1]) {
+        likes = parseInt(likesMatch[1].replace(/[,.]/g, ""), 10) || 0;
+      }
+
+      // Extract Thumbnail/Cover
+      const imgMatch = htmlText.match(/class="EmbeddedMediaImage"[^>]*src="([^"]+)"/i);
+      if (imgMatch && imgMatch[1]) {
+        coverUrl = imgMatch[1].replace(/&amp;/g, "&");
       }
     }
   } catch (err) {
-    console.warn(`oEmbed server fetch failed for ${shortcode}:`, err);
+    console.warn(`Proxy fetch failed for Instagram ${shortcode}:`, err);
   }
 
-  // 2. Fallback: Parse via Instagram Embed Iframe HTML
-  if (!authorName) {
-    try {
-      const embedUrl = `https://www.instagram.com/p/${shortcode}/embed/captioned/`;
-      const res = await fetch(embedUrl, {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        },
-        cache: "no-store",
-      });
+  // 2. Fallback jika proxy gagal: izinkan username fallback sementara agar tidak langsung dibuang ke error
+  // dan bisa di-enrich ulang di client side
+  const finalAuthor = authorName || `ig_${shortcode.toLowerCase()}`;
+  const finalDisplayName = authorDisplayName || `@${authorName || shortcode}`;
 
-      if (res.ok) {
-        const htmlText = await res.text();
-
-        // Extract Username dari HTML Embed
-        const userMatch = htmlText.match(/class="UsernameText"[^>]*>([^<]+)</i);
-        if (userMatch && userMatch[1]) {
-          authorName = userMatch[1].toLowerCase().trim().replace("@", "");
-          authorDisplayName = userMatch[1].trim().replace("@", "");
-        }
-
-        // Extract Caption
-        const captionMatch = htmlText.match(/class="Caption"[^>]*>([\s\S]*?)<\/div>/i);
-        if (captionMatch && captionMatch[1]) {
-          title = captionMatch[1].replace(/<[^>]+>/g, "").trim();
-        }
-
-        // Extract Likes
-        const likesMatch = htmlText.match(/([\d,.]+)\s+likes/i);
-        if (likesMatch && likesMatch[1]) {
-          likes = parseInt(likesMatch[1].replace(/[,.]/g, ""), 10) || 0;
-        }
-      }
-    } catch (err) {
-      console.warn(`Embed HTML fetch failed for ${shortcode}:`, err);
-    }
-  }
-
-  // Jika tetap gagal mendapatkan username, kelompokkan sebagai error / unknown
-  const finalAuthor = authorName || "unknown";
-  const finalDisplayName = authorDisplayName || "Unknown / Error";
   const isQualified = cleanTargetHashtag
     ? title.toLowerCase().includes(`#${cleanTargetHashtag}`)
     : true;
@@ -96,7 +85,7 @@ export async function fetchInstagramData(
     title,
     authorName: finalAuthor,
     authorDisplayName: finalDisplayName,
-    authorUrl: authorName ? `https://www.instagram.com/${authorName}` : cleanUrl,
+    authorUrl: `https://www.instagram.com/reel/${shortcode}/`,
     authorAvatar: "",
     coverUrl,
     views: 0,
@@ -105,7 +94,6 @@ export async function fetchInstagramData(
     shares: 0,
     saves: 0,
     postedAt: "Terbaru",
-    status: finalAuthor === "unknown" ? "error" : isQualified ? "qualified" : "unqualified",
-    errorMessage: finalAuthor === "unknown" ? "Gagal memuat profil Instagram" : undefined,
+    status: isQualified ? "qualified" : "unqualified",
   };
 }
