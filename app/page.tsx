@@ -52,8 +52,8 @@ function makeErrorVideo(sourceUrl: string, message: string): VideoItem {
     sourceUrl,
     videoUrl: sourceUrl,
     title: "Gagal Memuat Video (Private / Shortlink Blocked / Typo)",
-    authorName: isInstagram ? "ig_pending" : "unknown",
-    authorDisplayName: isInstagram ? "Instagram Reel" : "Unknown / Error",
+    authorName: isInstagram ? "instagram_creator" : "unknown",
+    authorDisplayName: isInstagram ? "Instagram Creator (Rate Limited)" : "Unknown / Error",
     authorUrl: sourceUrl,
     authorAvatar: "",
     coverUrl: "",
@@ -111,23 +111,30 @@ export default function Home() {
           const cleanUsername = clientData.username.toLowerCase().trim();
           const captionText = clientData.caption || v.title;
           
-          // Jika caption berisi hashtag sasaran ATAU jika caption default/kosong, tetap anggap qualified
           const hasHashtag = cleanHashtag
             ? captionText.toLowerCase().includes(`#${cleanHashtag}`)
             : true;
-          const isDefaultCaption = captionText.startsWith("Instagram Reel");
-          const isQualified = hasHashtag || isDefaultCaption;
+          const isFallback =
+            cleanUsername === "instagram_creator" || captionText.startsWith("Instagram Reel");
 
           return {
             ...v,
             platform: "instagram",
             authorName: cleanUsername,
-            authorDisplayName: `@${cleanUsername}`,
-            authorUrl: `https://www.instagram.com/${cleanUsername}`,
+            authorDisplayName:
+              cleanUsername === "instagram_creator"
+                ? "Instagram Creator (Fallback)"
+                : `@${cleanUsername}`,
+            authorUrl:
+              cleanUsername === "instagram_creator"
+                ? v.sourceUrl
+                : `https://www.instagram.com/${cleanUsername}`,
             title: captionText,
+            views: clientData.views || v.views,
             likes: clientData.likes || v.likes,
+            comments: clientData.comments || v.comments,
             coverUrl: clientData.thumbnail || v.coverUrl,
-            status: isQualified ? "qualified" : "unqualified",
+            status: hasHashtag || isFallback ? "qualified" : "unqualified",
             errorMessage: undefined,
           };
         }

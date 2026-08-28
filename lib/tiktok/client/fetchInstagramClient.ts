@@ -8,7 +8,7 @@ export interface InstagramClientMetric {
 }
 
 /**
- * Multi-Engine Instagram Scraper Client (Bypass Vercel & CORS Lock)
+ * Fetch Instagram metadata via specialized public JSON engines
  */
 export async function fetchInstagramDataClient(
   url: string
@@ -17,84 +17,51 @@ export async function fetchInstagramDataClient(
   const shortcode = match ? match[1] : null;
   if (!shortcode) return null;
 
-  const targetUrl = `https://www.instagram.com/reel/${shortcode}/`;
-
-  // Engine 1: Instagram Embed HTML Parser via AllOrigins Bypass
+  // 1. Coba vxinstagram JSON API
   try {
-    const res = await fetch(
-      `https://api.allorigins.win/get?url=${encodeURIComponent(
-        `https://www.instagram.com/p/${shortcode}/embed/captioned/`
-      )}`
-    );
+    const res = await fetch(`https://api.vxinstagram.com/post/${shortcode}`);
     if (res.ok) {
       const data = await res.json();
-      const html = data?.contents || "";
-
-      // Ekstraksi Username dari Embed Class .CaptionUsernameText
-      const userMatch =
-        html.match(/class="CaptionUsernameText"[^>]*>([^<]+)</i) ||
-        html.match(/href="\/\s*([a-zA-Z0-9_.-]+)\/?"[^>]*class="UsernameText"/i) ||
-        html.match(/@([a-zA-Z0-9_.-]+)/);
-
-      // Ekstraksi Caption
-      const captionMatch = html.match(/class="Caption"[^>]*>([\s\S]*?)<\/div>/i);
-      const cleanCaption = captionMatch
-        ? captionMatch[1].replace(/<[^>]+>/g, "").trim()
-        : `Instagram Reel (${shortcode})`;
-
-      // Ekstraksi Likes & Views dari Text Embed
-      const likesMatch = html.match(/([\d,.KMB]+)\s+likes/i);
-      const viewsMatch = html.match(/([\d,.KMB]+)\s+views/i);
-
-      const parseNumber = (str: string | null) => {
-        if (!str) return 0;
-        let num = parseFloat(str.replace(/,/g, ""));
-        if (str.includes("K")) num *= 1000;
-        if (str.includes("M")) num *= 1000000;
-        return Math.round(num);
-      };
-
-      if (userMatch && userMatch[1]) {
-        const username = userMatch[1].replace(/[^a-zA-Z0-9_.-]/g, "").toLowerCase();
-        if (username && username !== "instagram") {
-          return {
-            username,
-            caption: cleanCaption,
-            views: parseNumber(viewsMatch ? viewsMatch[1] : null),
-            likes: parseNumber(likesMatch ? likesMatch[1] : null),
-            comments: 0,
-            thumbnail: "",
-          };
-        }
-      }
-    }
-  } catch (e) {
-    console.warn("Embed Parser failed, trying Engine 2...", e);
-  }
-
-  // Engine 2: Fast Social Scraper Proxy API
-  try {
-    const res = await fetch(`https://social-dl.up.railway.app/api/ig?url=${encodeURIComponent(targetUrl)}`);
-    if (res.ok) {
-      const json = await res.json();
-      if (json?.data?.author?.username) {
+      if (data?.user?.username || data?.author) {
+        const username = (data.user?.username || data.author).toLowerCase().trim();
         return {
-          username: json.data.author.username.toLowerCase().trim(),
-          caption: json.data.caption || `Instagram Reel (${shortcode})`,
-          views: json.data.metrics?.views || 0,
-          likes: json.data.metrics?.likes || 0,
-          comments: json.data.metrics?.comments || 0,
-          thumbnail: json.data.thumbnail || "",
+          username,
+          caption: data.caption || `Instagram Reel (${shortcode})`,
+          views: data.views || 0,
+          likes: data.likes || 0,
+          comments: data.comments || 0,
+          thumbnail: data.media_urls?.[0] || "",
         };
       }
     }
   } catch (e) {
-    console.warn("Proxy API Engine failed...", e);
+    console.warn("VxInstagram engine failed...", e);
   }
 
-  // Fallback default jika postingan diprivat/dihapus
+  // 2. Coba ddinstagram JSON Engine
+  try {
+    const res = await fetch(`https://api.ddinstagram.com/posts/${shortcode}`);
+    if (res.ok) {
+      const data = await res.json();
+      const user = data?.username || data?.author_name || data?.post?.user?.username;
+      if (user) {
+        return {
+          username: user.toLowerCase().trim(),
+          caption: data.caption || `Instagram Reel (${shortcode})`,
+          views: data.views || 0,
+          likes: data.likes || 0,
+          comments: data.comments || 0,
+          thumbnail: data.thumbnail_url || "",
+        };
+      }
+    }
+  } catch (e) {
+    console.warn("DDInstagram engine failed...", e);
+  }
+
+  // Fallback: Gunakan kelompok nama 'Instagram Creator' agar tidak membentuk folder username acak
   return {
-    username: `ig_${shortcode.toLowerCase()}`,
+    username: "instagram_creator",
     caption: `Instagram Reel (${shortcode})`,
     views: 0,
     likes: 0,
