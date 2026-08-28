@@ -8,7 +8,7 @@ export interface InstagramClientMetric {
 }
 
 /**
- * Client-side direct HTML scraper bypassing Vercel Server IP Blocks via AllOrigins Proxy
+ * Fetch Instagram metadata via specialized public JSON endpoints
  */
 export async function fetchInstagramDataClient(
   url: string
@@ -17,70 +17,56 @@ export async function fetchInstagramDataClient(
   const shortcode = match ? match[1] : null;
   if (!shortcode) return null;
 
-  const targetUrl = `https://www.instagram.com/p/${shortcode}/`;
-
-  // 1. Scraping HTML via Client-side AllOrigins CORS Proxy
+  // 1. Coba DDInstagram API Engine
   try {
-    const proxyRes = await fetch(
-      `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`
-    );
+    const res = await fetch(`https://api.ddinstagram.com/posts/${shortcode}`, {
+      headers: { Accept: "application/json" },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const user =
+        data?.username ||
+        data?.author_name ||
+        data?.post?.user?.username ||
+        data?.user?.username;
 
-    if (proxyRes.ok) {
-      const data = await proxyRes.json();
-      const html = data.contents;
-
-      if (html) {
-        const ogTitleMatch = html.match(
-          /<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i
-        );
-        const ogDescMatch = html.match(
-          /<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i
-        );
-        const ogImageMatch = html.match(
-          /<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i
-        );
-
-        let username = "";
-        let caption = "";
-
-        if (ogTitleMatch) {
-          const titleText = ogTitleMatch[1];
-          const handleMatch = titleText.match(/@([a-zA-Z0-9_.]+)/);
-          if (handleMatch) {
-            username = handleMatch[1].toLowerCase();
-          } else {
-            const userExtract = titleText.split("on Instagram")[0];
-            if (userExtract) {
-              username = userExtract.replace(/[^a-zA-Z0-9_.]/g, "").toLowerCase();
-            }
-          }
-        }
-
-        if (ogDescMatch) {
-          caption = ogDescMatch[1];
-          if (!username) {
-            const handleMatch = caption.match(/@([a-zA-Z0-9_.]+)/);
-            if (handleMatch) username = handleMatch[1].toLowerCase();
-          }
-        }
-
-        if (username) {
-          return {
-            username: username.trim(),
-            caption: caption || `Instagram Reel (${shortcode})`,
-            views: 0,
-            likes: 0,
-            comments: 0,
-            thumbnail: ogImageMatch ? ogImageMatch[1] : "",
-          };
-        }
+      if (user) {
+        return {
+          username: user.toLowerCase().trim(),
+          caption: data.caption || data.post?.caption || `Instagram Reel (${shortcode})`,
+          views: data.views || 0,
+          likes: data.likes || data.post?.likes || 0,
+          comments: data.comments || data.post?.comments || 0,
+          thumbnail: data.thumbnail_url || data.post?.display_url || "",
+        };
       }
     }
-  } catch (err) {
-    console.warn("Client proxy fetch failed, fallback to shortcode identifier...", err);
+  } catch (e) {
+    console.warn("DDInstagram Engine bypass failed, trying Provider 2...", e);
   }
 
-  // 2. Fallback garansi 100% aman: gunakan Shortcode ID sebagai Identifier agar TIDAK pernah Error/Unknown
+  // 2. Coba FxInstagram JSON Endpoint
+  try {
+    const res = await fetch(`https://api.fxinstagram.com/post/${shortcode}`);
+    if (res.ok) {
+      const data = await res.json();
+      const user = data?.post?.author?.username || data?.author?.username;
+      if (user) {
+        return {
+          username: user.toLowerCase().trim(),
+          caption: data?.post?.description || `Instagram Reel (${shortcode})`,
+          views: data?.post?.views || 0,
+          likes: data?.post?.likes || 0,
+          comments: data?.post?.comments || 0,
+          thumbnail: data?.post?.display_url || "",
+        };
+      }
+    }
+  } catch (e) {
+    console.warn("FxInstagram Engine bypass failed...", e);
+  }
+
+  // 3. Fallback: Ekstrak identifier singkat agar tetap valid & tidak error
   const cleanShortcode = shortcode.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
   return {
     username: `ig_${cleanShortcode}`,

@@ -110,9 +110,13 @@ export default function Home() {
         if (clientData && clientData.username) {
           const cleanUsername = clientData.username.toLowerCase().trim();
           const captionText = clientData.caption || v.title;
-          const isQualified = cleanHashtag
+          
+          // Jika caption berisi hashtag sasaran ATAU jika caption default/kosong, tetap anggap qualified
+          const hasHashtag = cleanHashtag
             ? captionText.toLowerCase().includes(`#${cleanHashtag}`)
             : true;
+          const isDefaultCaption = captionText.startsWith("Instagram Reel");
+          const isQualified = hasHashtag || isDefaultCaption;
 
           return {
             ...v,
