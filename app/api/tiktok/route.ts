@@ -1,17 +1,22 @@
 import { NextResponse } from "next/server";
 import { fetchTikTokDataWithRetry } from "@/lib/tiktok/server/fetchTikTok";
 import { fetchYouTubeData } from "@/lib/tiktok/server/fetchYouTube";
-import { fetchInstagramDataClient } from "@/lib/tiktok/server/fetchInstagram";
+import { fetchInstagramData } from "@/lib/tiktok/server/fetchInstagram";
 import type { VideoBatchRequest, VideoBatchResponse, VideoItem } from "@/lib/tiktok/types";
 
 const MAX_BATCH_SIZE = 30;
 
+/**
+ * Normalisasi URL TikTok
+ */
 function sanitizeAndNormalizeUrl(url: string): { cleanUrl: string; videoId: string | null } {
   let cleaned = url.trim();
 
+  // Fix typo missing slash atau double slash pada /video/
   cleaned = cleaned.replace(/\/video(\d+)/gi, "/video/$1");
   cleaned = cleaned.replace(/\/video\/{2,}/gi, "/video/");
 
+  // Hapus query parameters (?is_from_webapp=1, dll)
   try {
     const parsed = new URL(cleaned);
     cleaned = `${parsed.origin}${parsed.pathname}`;
@@ -19,6 +24,7 @@ function sanitizeAndNormalizeUrl(url: string): { cleanUrl: string; videoId: stri
     // Abaikan jika bukan URL valid
   }
 
+  // Ekstraksi Video ID TikTok jika ada
   const tiktokIdMatch = cleaned.match(/\/video\/(\d+)/i);
   const videoId = tiktokIdMatch ? tiktokIdMatch[1] : null;
 
@@ -34,6 +40,9 @@ function sanitizeAndNormalizeUrl(url: string): { cleanUrl: string; videoId: stri
   return { cleanUrl: cleaned, videoId };
 }
 
+/**
+ * Resolve URL pendek (vt.tiktok.com / vm.tiktok.com)
+ */
 async function resolveTikTokUrl(url: string): Promise<string> {
   const trimmedUrl = url.trim();
   if (!trimmedUrl) return "";
@@ -112,34 +121,10 @@ export async function POST(request: Request) {
               videoData.sourceUrl = originalInputUrl;
             }
           } else if (isInstagram) {
-            // Menggunakan fetchInstagramDataClient langsung
-            const igData = await fetchInstagramDataClient(originalInputUrl);
-            if (igData && igData.username) {
-              const isQualified = cleanHashtag
-                ? igData.caption.toLowerCase().includes(`#${cleanHashtag}`)
-                : true;
-
-              videoData = {
-                id: originalInputUrl,
-                platform: "instagram",
-                sourceUrl: originalInputUrl,
-                videoUrl: originalInputUrl,
-                title: igData.caption || `Instagram Reel`,
-                authorName: igData.username,
-                authorDisplayName: igData.username,
-                authorUrl: `https://www.instagram.com/${igData.username}`,
-                authorAvatar: "",
-                coverUrl: igData.thumbnail || "",
-                views: igData.views || 0,
-                likes: igData.likes || 0,
-                comments: igData.comments || 0,
-                shares: 0,
-                saves: 0,
-                postedAt: "Terbaru",
-                status: isQualified ? "qualified" : "unqualified",
-              };
-            } else {
-              throw new Error("Gagal mengambil data Instagram");
+            // Pemanggilan server-side fetchInstagramData
+            videoData = await fetchInstagramData(originalInputUrl, cleanHashtag);
+            if (videoData) {
+              videoData.sourceUrl = originalInputUrl;
             }
           } else {
             const resolvedUrl = await resolveTikTokUrl(originalInputUrl);
@@ -152,7 +137,7 @@ export async function POST(request: Request) {
               throw new Error("Data video kosong / Private");
             }
           }
-          break;
+          break; // Sukses, keluar dari loop retry
         } catch (err) {
           attempts++;
           const errMessage = err instanceof Error ? err.message : "";
@@ -166,6 +151,7 @@ export async function POST(request: Request) {
             continue;
           }
 
+          // Fallback jika tetap gagal/error
           let detectedPlatform: "youtube" | "tiktok" | "instagram" = "tiktok";
           if (isYouTube) detectedPlatform = "youtube";
           if (isInstagram) detectedPlatform = "instagram";
