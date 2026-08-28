@@ -52,9 +52,9 @@ function makeErrorVideo(sourceUrl: string, message: string): VideoItem {
     sourceUrl,
     videoUrl: sourceUrl,
     title: "Gagal Memuat Video (Private / Shortlink Blocked / Typo)",
-    authorName: "unknown",
-    authorDisplayName: "Unknown / Error",
-    authorUrl: "",
+    authorName: isInstagram ? "ig_pending" : "unknown",
+    authorDisplayName: isInstagram ? "Instagram Reel" : "Unknown / Error",
+    authorUrl: sourceUrl,
     authorAvatar: "",
     coverUrl: "",
     views: 0,
@@ -102,12 +102,9 @@ export default function Home() {
   // Helper untuk memperkaya data Instagram melalui client-side fallback
   const enrichInstagramVideo = useCallback(
     async (v: VideoItem, cleanHashtag: string): Promise<VideoItem> => {
-      const isUnknown =
-        !v.authorName ||
-        v.authorName.toLowerCase() === "unknown" ||
-        v.authorName.startsWith("ig_");
+      const isInstagramLink = v.sourceUrl.includes("instagram.com") || v.platform === "instagram";
 
-      if (v.platform === "instagram" && (v.status === "error" || isUnknown)) {
+      if (isInstagramLink) {
         const clientData = await fetchInstagramDataClient(v.sourceUrl);
         if (clientData && clientData.username) {
           const cleanUsername = clientData.username.toLowerCase().trim();
@@ -118,6 +115,7 @@ export default function Home() {
 
           return {
             ...v,
+            platform: "instagram",
             authorName: cleanUsername,
             authorDisplayName: `@${cleanUsername}`,
             authorUrl: `https://www.instagram.com/${cleanUsername}`,
