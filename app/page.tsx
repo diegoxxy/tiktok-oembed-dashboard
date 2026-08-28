@@ -154,7 +154,7 @@ export default function Home() {
                   return {
                     ...v,
                     authorName: cleanUsername,
-                    authorDisplayName: clientData.username,
+                    authorDisplayName: `@${cleanUsername}`,
                     authorUrl: `https://www.instagram.com/${cleanUsername}`,
                     title: captionText,
                     likes: clientData.likes || v.likes,
@@ -192,7 +192,7 @@ export default function Home() {
                 return {
                   ...fallbackVideo,
                   authorName: cleanUsername,
-                  authorDisplayName: clientData.username,
+                  authorDisplayName: `@${cleanUsername}`,
                   authorUrl: `https://www.instagram.com/${cleanUsername}`,
                   title: captionText,
                   likes: clientData.likes || fallbackVideo.likes,
