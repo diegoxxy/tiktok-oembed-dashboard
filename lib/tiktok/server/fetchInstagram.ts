@@ -1,80 +1,62 @@
-export interface InstagramClientMetric {
-  username: string;
-  views: number;
-  likes: number;
-  comments: number;
-  caption: string;
-  thumbnail: string;
-}
+import type { VideoItem } from "@/lib/tiktok/types";
 
-export async function fetchInstagramDataClient(url: string): Promise<InstagramClientMetric | null> {
+/**
+ * Fetch metadata Instagram dari sisi server
+ */
+export async function fetchInstagramData(
+  url: string,
+  targetHashtag: string
+): Promise<VideoItem | null> {
   const match = url.match(/\/(?:p|reel|reels)\/([A-Za-z0-9_-]+)/);
   const shortcode = match ? match[1] : null;
-  if (!shortcode) return null;
+
+  if (!shortcode) {
+    throw new Error("Format URL Instagram tidak valid");
+  }
 
   const targetUrl = `https://www.instagram.com/p/${shortcode}/`;
 
-  // 1. Coba via JSONP / Public OEmbed endpoint
   try {
-    const res = await fetch(`https://api.instagram.com/oembed/?url=${encodeURIComponent(targetUrl)}`, {
-      mode: "cors",
+    const oembedUrl = `https://api.instagram.com/oembed/?url=${encodeURIComponent(targetUrl)}`;
+    const res = await fetch(oembedUrl, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
+      next: { revalidate: 3600 },
     });
+
     if (res.ok) {
       const data = await res.json();
-      if (data.author_name) {
-        return {
-          username: data.author_name.toLowerCase().trim(),
-          caption: data.title || "",
-          views: 0,
-          likes: 0,
-          comments: 0,
-          thumbnail: data.thumbnail_url || "",
-        };
-      }
+      const rawUsername = data.author_name || "unknown";
+      const cleanUsername = rawUsername.toLowerCase().trim();
+      const caption = data.title || "";
+      const hasHashtag = caption.toLowerCase().includes(targetHashtag.toLowerCase());
+
+      return {
+        id: shortcode,
+        platform: "instagram",
+        sourceUrl: url,
+        videoUrl: targetUrl,
+        title: caption || `Instagram Post (${shortcode})`,
+        authorName: cleanUsername,
+        authorDisplayName: data.author_name || cleanUsername,
+        authorUrl: `https://www.instagram.com/${cleanUsername}`,
+        authorAvatar: "",
+        coverUrl: data.thumbnail_url || "",
+        views: 0,
+        likes: 0,
+        comments: 0,
+        shares: 0,
+        saves: 0,
+        postedAt: "-",
+        status: hasHashtag ? "qualified" : "unqualified",
+      };
     }
-  } catch {
-    // Ignore CORS error and move to next fallback
+  } catch (err) {
+    console.warn("Server-side oEmbed Instagram gagal, memicu fallback client:", err);
   }
 
-  // 2. Fallback: Ekstraksi via JSONP script tag injection (Memotong blokir CORS Browser)
-  return new Promise((resolve) => {
-    const callbackName = `jsonp_ig_${shortcode}_${Date.now()}`;
-    const script = document.createElement("script");
-
-    const cleanup = () => {
-      if (script.parentNode) script.parentNode.removeChild(script);
-      delete (window as any)[callbackName];
-    };
-
-    const timer = setTimeout(() => {
-      cleanup();
-      resolve(null);
-    }, 4000);
-
-    (window as any)[callbackName] = (data: any) => {
-      clearTimeout(timer);
-      cleanup();
-      if (data && data.author_name) {
-        resolve({
-          username: data.author_name.toLowerCase().trim(),
-          caption: data.title || "",
-          views: 0,
-          likes: 0,
-          comments: 0,
-          thumbnail: data.thumbnail_url || "",
-        });
-      } else {
-        resolve(null);
-      }
-    };
-
-    script.src = `https://api.instagram.com/oembed/?url=${encodeURIComponent(targetUrl)}&callback=${callbackName}`;
-    script.onerror = () => {
-      clearTimeout(timer);
-      cleanup();
-      resolve(null);
-    };
-
-    document.body.appendChild(script);
-  });
+  // Jika server oEmbed diblokir / rate limit, lempar error agar ditangani oleh client fallback
+  throw new Error("Instagram Rate Limit / Private Video");
 }
