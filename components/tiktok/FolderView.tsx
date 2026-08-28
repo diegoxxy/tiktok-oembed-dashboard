@@ -9,7 +9,7 @@ interface FolderViewProps {
 }
 
 export default function FolderView({ creators, onUpdateVideo }: FolderViewProps) {
-  const [selectedCreator, setSelectedCreator] = useState<CreatorGroup | null>(null);
+  const [selectedAuthorName, setSelectedAuthorName] = useState<string | null>(null);
   const [editingVideo, setEditingVideo] = useState<VideoItem | null>(null);
 
   // Form State
@@ -20,9 +20,18 @@ export default function FolderView({ creators, onUpdateVideo }: FolderViewProps)
   const [editShares, setEditShares] = useState<number>(0);
   const [editSaves, setEditSaves] = useState<number>(0);
 
+  // Cari creator group terkini berdasarkan state props `creators`
+  const selectedCreator = creators.find(
+    (c) => c.authorName.toLowerCase() === selectedAuthorName?.toLowerCase()
+  );
+
   const handleOpenEdit = (v: VideoItem) => {
     setEditingVideo(v);
-    setEditAuthor(v.authorName === "instagram_creator" ? "" : v.authorName);
+    setEditAuthor(
+      v.authorName === "instagram_creator" || v.authorName === "unknown"
+        ? ""
+        : v.authorName
+    );
     setEditViews(v.views || 0);
     setEditLikes(v.likes || 0);
     setEditComments(v.comments || 0);
@@ -51,37 +60,22 @@ export default function FolderView({ creators, onUpdateVideo }: FolderViewProps)
       status: "qualified",
     };
 
+    // Update global state di app/page.tsx -> otomatis mereorganisasi creators folder
     if (onUpdateVideo) {
       onUpdateVideo(updated);
-    }
-
-    if (selectedCreator) {
-      const updatedVideos = selectedCreator.videos.map((vid) =>
-        vid.id === updated.id ? updated : vid
-      );
-      setSelectedCreator({
-        ...selectedCreator,
-        authorName: finalAuthor,
-        authorDisplayName: `@${finalAuthor}`,
-        videos: updatedVideos,
-        totalViews: updatedVideos.reduce((a, b) => a + (b.views || 0), 0),
-        totalLikes: updatedVideos.reduce((a, b) => a + (b.likes || 0), 0),
-        totalComments: updatedVideos.reduce((a, b) => a + (b.comments || 0), 0),
-        totalShares: updatedVideos.reduce((a, b) => a + (b.shares || 0), 0),
-        totalSaves: updatedVideos.reduce((a, b) => a + (b.saves || 0), 0),
-      });
     }
 
     setEditingVideo(null);
   };
 
+  // Tampilan Dalam Folder
   if (selectedCreator) {
     const creatorAvatar = selectedCreator.videos.find((v) => v.authorAvatar)?.authorAvatar;
 
     return (
       <div className="space-y-6">
         <button
-          onClick={() => setSelectedCreator(null)}
+          onClick={() => setSelectedAuthorName(null)}
           className="text-xs text-cyan-400 hover:underline flex items-center gap-1 font-medium"
         >
           ← Kembali ke Semua Folder Kreator
@@ -116,9 +110,14 @@ export default function FolderView({ creators, onUpdateVideo }: FolderViewProps)
               className="bg-[#111827] border border-[#1e293b] rounded-xl p-4 flex flex-col justify-between space-y-4"
             >
               <div>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
-                  {v.status}
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+                    {v.status}
+                  </span>
+                  <span className="text-[11px] font-mono text-cyan-400 font-semibold">
+                    @{v.authorName}
+                  </span>
+                </div>
                 <h4 className="text-xs font-semibold text-slate-200 mt-2 line-clamp-2">
                   {v.title}
                 </h4>
@@ -182,11 +181,14 @@ export default function FolderView({ creators, onUpdateVideo }: FolderViewProps)
                   <label className="text-xs text-slate-300 block mb-1">Username Creator</label>
                   <input
                     type="text"
-                    placeholder="Contoh: nama_creator"
+                    placeholder="Contoh: kutipanpodcast"
                     value={editAuthor}
                     onChange={(e) => setEditAuthor(e.target.value)}
                     className="w-full bg-[#0b0f19] border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-cyan-500"
                   />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    *Mengubah username akan otomatis memindahkan video ini ke folder username tersebut.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -250,7 +252,7 @@ export default function FolderView({ creators, onUpdateVideo }: FolderViewProps)
                   onClick={handleSaveEdit}
                   className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold"
                 >
-                  Simpan & Update Ekspor
+                  Simpan & Organisasi Folder
                 </button>
               </div>
             </div>
@@ -260,6 +262,7 @@ export default function FolderView({ creators, onUpdateVideo }: FolderViewProps)
     );
   }
 
+  // Tampilan Utama Seluruh Card Folder Kreator
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {creators.map((c) => {
@@ -268,7 +271,7 @@ export default function FolderView({ creators, onUpdateVideo }: FolderViewProps)
         return (
           <div
             key={c.authorName}
-            onClick={() => setSelectedCreator(c)}
+            onClick={() => setSelectedAuthorName(c.authorName)}
             className="bg-[#111827] border border-[#1e293b] hover:border-cyan-500/50 p-5 rounded-xl cursor-pointer transition-all hover:scale-[1.01]"
           >
             <div className="flex items-center justify-between mb-4">
