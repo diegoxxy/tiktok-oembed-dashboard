@@ -89,7 +89,8 @@ export async function parseImportFile(file: File): Promise<ParseResult> {
         const extractedUrls: string[] = [];
 
         // Regex fleksibel menangkap TikTok, YouTube & Instagram
-        const mediaRegex = /https?:\/\/(?:www\.|vt\.|vm\.)?(?:tiktok\.com|youtube\.com|youtu\.be|instagram\.com)\/[^\s"',]+/gi;
+        const mediaRegex =
+          /https?:\/\/(?:www\.|vt\.|vm\.)?(?:tiktok\.com|youtube\.com|youtu\.be|instagram\.com)\/[^\s"',]+/gi;
 
         jsonRows.forEach((row) => {
           if (Array.isArray(row)) {
