@@ -1,98 +1,220 @@
-import Link from "next/link";
-import type { CreatorGroup } from "@/lib/tiktok/types";
-import { formatCompactViews } from "@/lib/tiktok/format";
-import { Crown, Video, Eye, Heart } from "lucide-react";
+"use client";
+
+import { useState } from "react";
+import type { CreatorGroup, VideoItem } from "@/lib/tiktok/types";
 
 interface FolderViewProps {
   creators: CreatorGroup[];
+  onUpdateVideo?: (updatedVideo: VideoItem) => void;
 }
 
-function avatarHue(name: string): number {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) % 360;
-  return hash;
-}
+export default function FolderView({ creators, onUpdateVideo }: FolderViewProps) {
+  const [selectedCreator, setSelectedCreator] = useState<CreatorGroup | null>(null);
+  const [editingVideo, setEditingVideo] = useState<VideoItem | null>(null);
 
-function CreatorAvatar({ name, avatarUrl }: { name: string; avatarUrl: string }) {
-  if (avatarUrl) {
-    // eslint-disable-next-line @next/next/no-img-element -- CDN domain TikTok/YouTube berubah-ubah
+  // Form State
+  const [editAuthor, setEditAuthor] = useState("");
+  const [editViews, setEditViews] = useState<number>(0);
+  const [editLikes, setEditLikes] = useState<number>(0);
+
+  const handleOpenEdit = (v: VideoItem) => {
+    setEditingVideo(v);
+    setEditAuthor(v.authorName === "instagram_creator" ? "" : v.authorName);
+    setEditViews(v.views);
+    setEditLikes(v.likes);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingVideo) return;
+
+    const newUsername = editAuthor.trim().toLowerCase().replace(/^@/, "");
+
+    const updated: VideoItem = {
+      ...editingVideo,
+      authorName: newUsername || editingVideo.authorName,
+      authorDisplayName: newUsername ? `@${newUsername}` : editingVideo.authorDisplayName,
+      authorUrl: newUsername ? `https://www.instagram.com/${newUsername}` : editingVideo.authorUrl,
+      views: Number(editViews) || 0,
+      likes: Number(editLikes) || 0,
+      status: "qualified",
+    };
+
+    // Callback ke parent app/page.tsx
+    if (onUpdateVideo) {
+      onUpdateVideo(updated);
+    }
+
+    // Update lokal state folder tampilan saat ini
+    if (selectedCreator) {
+      const updatedVideos = selectedCreator.videos.map((vid) =>
+        vid.id === updated.id ? updated : vid
+      );
+      setSelectedCreator({
+        ...selectedCreator,
+        authorName: newUsername || selectedCreator.authorName,
+        videos: updatedVideos,
+        totalViews: updatedVideos.reduce((a, b) => a + b.views, 0),
+        totalLikes: updatedVideos.reduce((a, b) => a + b.likes, 0),
+      });
+    }
+
+    setEditingVideo(null);
+  };
+
+  if (selectedCreator) {
     return (
-      <img
-        src={avatarUrl}
-        alt={name}
-        className="w-11 h-11 rounded-full object-cover border border-slate-700 flex-shrink-0"
-      />
+      <div className="space-y-6">
+        <button
+          onClick={() => setSelectedCreator(null)}
+          className="text-xs text-cyan-400 hover:underline flex items-center gap-1 font-medium"
+        >
+          ← Kembali ke Semua Folder Kreator
+        </button>
+
+        <div className="bg-[#111827] border border-[#1e293b] rounded-xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-full bg-cyan-950/60 border border-cyan-800/50 flex items-center justify-center text-cyan-400 text-xl font-bold">
+              @{selectedCreator.authorName.slice(0, 2).toUpperCase()}
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white">@{selectedCreator.authorName}</h2>
+              <p className="text-xs text-slate-400">Total Link Video: {selectedCreator.videos.length} Video</p>
+            </div>
+          </div>
+        </div>
+
+        {/* List Card Video */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {selectedCreator.videos.map((v) => (
+            <div
+              key={v.id}
+              className="bg-[#111827] border border-[#1e293b] rounded-xl p-4 flex flex-col justify-between space-y-4"
+            >
+              <div>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+                  {v.status}
+                </span>
+                <h4 className="text-xs font-semibold text-slate-200 mt-2 line-clamp-2">
+                  {v.title}
+                </h4>
+                <p className="text-[10px] text-slate-500 mt-1 truncate">
+                  {v.sourceUrl}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs text-slate-300 bg-slate-900/50 p-3 rounded-lg border border-slate-800">
+                <div>👁️ Views: <strong className="text-amber-400">{v.views.toLocaleString("id-ID")}</strong></div>
+                <div>❤️ Likes: <strong className="text-rose-400">{v.likes.toLocaleString("id-ID")}</strong></div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <a
+                  href={v.sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-center rounded-lg text-xs font-medium transition-colors"
+                >
+                  Buka Link Asli ↗
+                </a>
+                <button
+                  onClick={() => handleOpenEdit(v)}
+                  className="px-4 py-2 bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-semibold transition-colors"
+                >
+                  ✏️ Edit Data
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Modal Edit */}
+        {editingVideo && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-[#111827] border border-[#1e293b] p-6 rounded-xl max-w-md w-full space-y-4">
+              <h3 className="text-base font-bold text-white">Edit Data Video Manual</h3>
+              <p className="text-xs text-slate-400 truncate">{editingVideo.sourceUrl}</p>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-slate-300 block mb-1">Username Creator Instagram</label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: nama_creator"
+                    value={editAuthor}
+                    onChange={(e) => setEditAuthor(e.target.value)}
+                    className="w-full bg-[#0b0f19] border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-300 block mb-1">Jumlah Views</label>
+                  <input
+                    type="number"
+                    value={editViews}
+                    onChange={(e) => setEditViews(Number(e.target.value))}
+                    className="w-full bg-[#0b0f19] border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-300 block mb-1">Jumlah Likes</label>
+                  <input
+                    type="number"
+                    value={editLikes}
+                    onChange={(e) => setEditLikes(Number(e.target.value))}
+                    className="w-full bg-[#0b0f19] border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={() => setEditingVideo(null)}
+                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg text-xs font-semibold"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-semibold"
+                >
+                  Simpan & Update Ekspor
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     );
   }
-  const hue = avatarHue(name);
-  return (
-    <div
-      className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0 border border-slate-700"
-      style={{ backgroundColor: `hsl(${hue} 45% 28%)` }}
-    >
-      {name.slice(0, 2).toUpperCase()}
-    </div>
-  );
-}
-
-function CreatorCard({ creator }: { creator: CreatorGroup }) {
-  return (
-    <Link
-      href={`/creator/${encodeURIComponent(creator.authorName)}`}
-      className="block text-left bg-[#0b0f19] border border-slate-800 hover:border-cyan-500/50 rounded-xl p-4 transition-all hover:translate-y-[-2px] cursor-pointer relative group"
-    >
-      {creator.isTopCreator && (
-        <span className="absolute top-3 right-3 inline-flex items-center gap-1 text-[10px] font-semibold text-amber-400 bg-amber-950/40 border border-amber-900/50 px-1.5 py-0.5 rounded">
-          <Crown className="w-3 h-3" /> TOP
-        </span>
-      )}
-
-      {/* Profile Header */}
-      <div className="flex items-center gap-3">
-        <CreatorAvatar name={creator.authorName} avatarUrl={creator.authorAvatar} />
-        <div className="min-w-0">
-          <p className="text-sm font-bold text-cyan-400 group-hover:text-cyan-300 truncate">
-            @{creator.authorName}
-          </p>
-          <p className="text-[11px] text-slate-500">Kreator</p>
-        </div>
-      </div>
-
-      {/* Engagement Metrics per Folder/Creator */}
-      <div className="flex items-center justify-between gap-2 mt-4 pt-3 border-t border-slate-800/80 text-xs">
-        <div className="flex items-center gap-1 text-slate-400" title="Total Video">
-          <Video className="w-3.5 h-3.5" />
-          {creator.videoCount}
-        </div>
-        <div className="flex items-center gap-1 text-amber-400 font-semibold" title="Total Views">
-          <Eye className="w-3.5 h-3.5" />
-          {formatCompactViews(creator.totalViews)}
-        </div>
-        <div className="flex items-center gap-1 text-rose-400 font-semibold" title="Total Likes">
-          <Heart className="w-3.5 h-3.5" />
-          {formatCompactViews(creator.totalLikes || 0)}
-        </div>
-      </div>
-    </Link>
-  );
-}
-
-export default function FolderView({ creators }: FolderViewProps) {
-  if (creators.length === 0) {
-    return (
-      <div className="bg-[#131b2e] border border-[#1e293b] rounded-xl p-10 text-center text-slate-400">
-        Tidak ada kreator yang cocok dengan filter saat ini.
-      </div>
-    );
-  }
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-      {creators.map((creator) => (
-        <CreatorCard key={creator.authorName} creator={creator} />
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {creators.map((c) => (
+        <div
+          key={c.authorName}
+          onClick={() => setSelectedCreator(c)}
+          className="bg-[#111827] border border-[#1e293b] hover:border-cyan-500/50 p-5 rounded-xl cursor-pointer transition-all hover:scale-[1.01]"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-cyan-950 border border-cyan-800 flex items-center justify-center text-cyan-400 font-bold text-sm">
+                @{c.authorName.slice(0, 2).toUpperCase()}
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white truncate max-w-[150px]">
+                  @{c.authorName}
+                </h3>
+                <p className="text-[10px] text-slate-400">{c.videos.length} Video Link</p>
+              </div>
+            </div>
+            <span className="text-xs text-cyan-400 font-semibold">Buka Folder →</span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 text-xs pt-3 border-t border-slate-800/60 text-slate-400">
+            <div>Views: <span className="font-bold text-amber-400">{c.totalViews.toLocaleString("id-ID")}</span></div>
+            <div>Likes: <span className="font-bold text-rose-400">{c.totalLikes.toLocaleString("id-ID")}</span></div>
+          </div>
+        </div>
       ))}
     </div>
   );
 }
-
-export { CreatorAvatar };

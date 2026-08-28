@@ -98,6 +98,17 @@ export default function Home() {
     }
   }, []);
 
+  // Handler untuk memperbarui data video hasil edit manual di komponen anak (FolderView)
+  const handleUpdateVideo = useCallback((updatedVideo: VideoItem) => {
+    setAllVideos((prevVideos) => {
+      const newVideos = prevVideos.map((v) =>
+        v.id === updatedVideo.id ? updatedVideo : v
+      );
+      localStorage.setItem("tiktok_analytics_last_scan", JSON.stringify(newVideos));
+      return newVideos;
+    });
+  }, []);
+
   const enrichInstagramVideo = useCallback(
     async (v: VideoItem, cleanHashtag: string): Promise<VideoItem> => {
       const isInstagramLink =
@@ -108,10 +119,6 @@ export default function Home() {
         if (clientData && clientData.username) {
           const cleanUsername = clientData.username.toLowerCase().trim();
           const captionText = clientData.caption || v.title;
-          
-          const hasHashtag = cleanHashtag
-            ? captionText.toLowerCase().includes(`#${cleanHashtag}`)
-            : true;
 
           return {
             ...v,
@@ -376,7 +383,10 @@ export default function Home() {
             />
 
             {viewMode === "folder" ? (
-              <FolderView creators={creatorsForFolder} />
+              <FolderView
+                creators={creatorsForFolder}
+                onUpdateVideo={handleUpdateVideo}
+              />
             ) : (
               <MasterTable videos={sortedVideosForTable} />
             )}
