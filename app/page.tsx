@@ -15,6 +15,7 @@ import { exportResultToExcel } from "@/lib/tiktok/exportExcel";
 import { exportResultToPdf } from "@/lib/tiktok/exportPdf";
 import { computeGlobalMetrics, groupVideosByCreator } from "@/lib/tiktok/aggregate";
 import { filterVideos, sortCreators, sortVideos } from "@/lib/tiktok/filterSort";
+import { fetchInstagramDataClient } from "@/lib/tiktok/client/fetchInstagramClient";
 
 import InputPanel from "@/components/tiktok/InputPanel";
 import KpiRibbon from "@/components/tiktok/KpiRibbon";
@@ -38,9 +39,15 @@ function parseUrlsFromText(text: string): string[] {
 
 function makeErrorVideo(sourceUrl: string, message: string): VideoItem {
   const isYouTube = sourceUrl.includes("youtube.com") || sourceUrl.includes("youtu.be");
+  const isInstagram = sourceUrl.includes("instagram.com");
+  
+  let platform: "youtube" | "tiktok" | "instagram" = "tiktok";
+  if (isYouTube) platform = "youtube";
+  if (isInstagram) platform = "instagram";
+
   return {
     id: sourceUrl,
-    platform: isYouTube ? "youtube" : "tiktok",
+    platform,
     sourceUrl,
     videoUrl: sourceUrl,
     title: "Gagal Memuat Video (Private / Shortlink Blocked / Typo)",
@@ -100,7 +107,6 @@ export default function Home() {
     const cleanHashtag = targetHashtag.replace(/^#/, "").trim();
     const urls = parseUrlsFromText(urlsInput);
 
-    // Split per 5 link untuk menghindari rate-limit berlebih pada vt.tiktok.com
     const chunks = chunkArray(urls, 5);
     const toCache: { sourceUrl: string; video: VideoItem }[] = [];
     const collectedVideos: VideoItem[] = [];
@@ -128,9 +134,31 @@ export default function Home() {
         }
 
         if (data.videos) {
-          setAllVideos((prev) => [...prev, ...data.videos]);
-          collectedVideos.push(...data.videos);
-          toCache.push(...data.videos.map((v: VideoItem) => ({ sourceUrl: v.sourceUrl, video: v })));
+          // Client-side enrichment khusus Instagram
+          const processedVideos = await Promise.all(
+            data.videos.map(async (v: VideoItem) => {
+              if (v.platform === "instagram") {
+                const clientData = await fetchInstagramDataClient(v.sourceUrl);
+                if (clientData && clientData.username) {
+                  const cleanUsername = clientData.username.toLowerCase().trim();
+                  return {
+                    ...v,
+                    authorName: cleanUsername,
+                    authorDisplayName: clientData.username,
+                    authorUrl: `https://www.instagram.com/${cleanUsername}`,
+                    title: clientData.caption || v.title,
+                    likes: clientData.likes || v.likes,
+                    coverUrl: clientData.thumbnail || v.coverUrl,
+                  };
+                }
+              }
+              return v;
+            })
+          );
+
+          setAllVideos((prev) => [...prev, ...processedVideos]);
+          collectedVideos.push(...processedVideos);
+          toCache.push(...processedVideos.map((v: VideoItem) => ({ sourceUrl: v.sourceUrl, video: v })));
         }
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : "Gagal menghubungi server";
@@ -177,17 +205,14 @@ export default function Home() {
     [filteredVideos, videoSort]
   );
 
-  // Menyusun folder kreator dan menjamin folder `@unknown` SELALU ditampilkan
   const creatorsForFolder = useMemo(() => {
     const grouped = groupVideosByCreator(filteredVideos);
     const sorted = sortCreators(grouped, creatorSort);
 
-    // Cek apakah ada video error / unknown
     const unknownGroup = grouped.find(
       (c) => c.authorName.toLowerCase() === "unknown"
     );
 
-    // Pisahkan kreator valid dan paksa unknown di urutan pertama jika ada
     const validCreators = sorted.filter(
       (c) => c.authorName.toLowerCase() !== "unknown"
     );
@@ -224,7 +249,7 @@ export default function Home() {
               Bola Mata Currency Analytics
             </div>
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">
-              TikTok & YouTube Campaign Analytics Dashboard
+              TikTok, YouTube & Instagram Campaign Dashboard
             </h1>
             <p className="text-sm text-slate-400 mt-1">
               Verifikasi, agregasi, dan analisis performa kampanye multi-platform.
