@@ -1,7 +1,23 @@
 import type { VideoItem } from "../types";
 
 /**
- * Scraper Instagram dengan Fallback Graceful (Anti-Crash)
+ * Membuat SVG Cover placeholder ketika thumbnail Instagram diblokir Meta API
+ */
+function createInstagramPlaceholderSvg(shortcode: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400" viewBox="0 0 300 400">
+    <rect width="100%" height="100%" fill="#0f172a"/>
+    <circle cx="150" cy="170" r="45" fill="none" stroke="#ec4899" stroke-width="4"/>
+    <rect x="110" y="130" width="80" height="80" rx="20" fill="none" stroke="#ec4899" stroke-width="4"/>
+    <circle cx="170" cy="148" r="5" fill="#ec4899"/>
+    <text x="50%" y="260" dominant-baseline="middle" text-anchor="middle" fill="#94a3b8" font-family="sans-serif" font-size="14" font-weight="600">INSTAGRAM REEL</text>
+    <text x="50%" y="285" dominant-baseline="middle" text-anchor="middle" fill="#64748b" font-family="monospace" font-size="12">${shortcode}</text>
+  </svg>`;
+
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+/**
+ * Scraper Instagram Robust & Graceful Fallback
  */
 export async function fetchInstagramData(
   url: string,
@@ -17,15 +33,14 @@ export async function fetchInstagramData(
     throw new Error("URL Instagram tidak valid");
   }
 
-  // Data Default (Fallback jika Meta memblokir scraping)
-  let authorName = "instagram_user";
+  // Gunakan ID unik shortcode sebagai nama author default agar TIDAK TERGABUNG ke satu folder
+  let authorName = `ig_${shortcode}`;
   let title = `Instagram Reel (${shortcode})`;
-  let coverUrl = "";
+  let coverUrl = createInstagramPlaceholderSvg(shortcode);
   let likes = 0;
   let views = 0;
 
   try {
-    // Coba fetch dari open oembed endpoint
     const oembedUrl = `https://api.instagram.com/oembed/?url=${encodeURIComponent(
       `https://www.instagram.com/p/${shortcode}/`
     )}`;
@@ -46,11 +61,10 @@ export async function fetchInstagramData(
       if (data.thumbnail_url) coverUrl = data.thumbnail_url;
     }
   } catch (err) {
-    // Mengabaikan error jaringan agar tidak memicu status "Error / Gagal Load"
-    console.warn(`[Instagram Fetch Notice] Memakai fallback data untuk shortcode: ${shortcode}`);
+    console.warn(`[Instagram Fetch Notice] Menggunakan fallback data untuk shortcode: ${shortcode}`);
   }
 
-  // Evaluasi Hashtag (Jika title tidak terambil dari API, loloskan agar status tidak error)
+  // Evaluasi Hashtag
   const cleanTargetHashtag = targetHashtag.toLowerCase().replace("#", "").trim();
   const isQualified =
     title.toLowerCase().includes(cleanTargetHashtag) || title.startsWith("Instagram Reel");
@@ -63,7 +77,9 @@ export async function fetchInstagramData(
     title: title,
     authorName: authorName,
     authorDisplayName: authorName,
-    authorUrl: `https://www.instagram.com/${authorName}`,
+    authorUrl: authorName.startsWith("ig_")
+      ? cleanUrl
+      : `https://www.instagram.com/${authorName}`,
     authorAvatar: "",
     coverUrl: coverUrl,
     views: views,
