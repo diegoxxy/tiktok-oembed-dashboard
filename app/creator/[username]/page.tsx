@@ -51,7 +51,7 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
     });
   }, [allVideos, cleanUsername, isUnknownPage]);
 
-  // Deteksi Platform Kreator Utama & URL Profil
+  // Deteksi Platform Utama Kreator (TikTok / YouTube / Instagram)
   const primaryPlatform = useMemo(() => {
     if (isUnknownPage) {
       return { name: "System Error", profileUrl: null };
@@ -70,14 +70,23 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
       firstVideo.platform === "youtube" ||
       targetUrl.includes("youtube.com") ||
       targetUrl.includes("youtu.be");
+    const isInstagram =
+      firstVideo.platform === "instagram" || targetUrl.includes("instagram.com");
+
+    let name = "TikTok";
+    let profileUrl = `https://www.tiktok.com/@${cleanUsername}`;
+
+    if (isYouTube) {
+      name = "YouTube";
+      profileUrl = `https://www.youtube.com/@${cleanUsername}`;
+    } else if (isInstagram) {
+      name = "Instagram";
+      profileUrl = `https://www.instagram.com/${cleanUsername}`;
+    }
 
     return {
-      name: isYouTube ? "YouTube" : "TikTok",
-      profileUrl:
-        firstVideo.authorUrl ||
-        (isYouTube
-          ? `https://www.youtube.com/@${cleanUsername}`
-          : `https://www.tiktok.com/@${cleanUsername}`),
+      name,
+      profileUrl: firstVideo.authorUrl || profileUrl,
     };
   }, [creatorVideos, cleanUsername, isUnknownPage]);
 
@@ -139,7 +148,7 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
                 {isUnknownPage ? "⚠️ Link Error / Unknown" : `@${cleanUsername}`}
               </h1>
               <p className="text-sm text-slate-400 mt-0.5">
-                Total Link Bermasalah:{" "}
+                Total Link Video:{" "}
                 <strong className={isUnknownPage ? "text-amber-400" : "text-white"}>
                   {creatorVideos.length} Video
                 </strong>
@@ -220,7 +229,15 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
                 video.platform === "youtube" ||
                 targetUrl.includes("youtube.com") ||
                 targetUrl.includes("youtu.be");
-              const platformName = isYouTube ? "YouTube" : "TikTok";
+              const isInstagram =
+                video.platform === "instagram" || targetUrl.includes("instagram.com");
+
+              let buttonStyle = "bg-cyan-950/40 text-cyan-400 border-cyan-800/50 hover:bg-cyan-900/50";
+              if (isYouTube) {
+                buttonStyle = "bg-red-950/40 text-red-400 border-red-800/50 hover:bg-red-900/50";
+              } else if (isInstagram) {
+                buttonStyle = "bg-pink-950/40 text-pink-400 border-pink-800/50 hover:bg-pink-900/50";
+              }
 
               return (
                 <div
@@ -250,7 +267,7 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
                   <div className="flex-1 flex flex-col justify-between min-w-0">
                     <div>
                       <p className="text-sm font-semibold text-white line-clamp-2">
-                        {video.title || "Gagal Memuat Video (Private / Dihapus / Typo)"}
+                        {video.title || "Instagram Post"}
                       </p>
                       {video.errorMessage && (
                         <p className="text-[11px] text-rose-400 mt-1 font-mono bg-rose-950/30 p-1.5 rounded border border-rose-900/40">
@@ -285,11 +302,7 @@ export default function CreatorDetailPage({ params }: { params: Promise<{ userna
                       href={targetUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className={`inline-flex items-center justify-center gap-1.5 text-xs py-2 px-3 rounded-lg font-medium transition ${
-                        isYouTube
-                          ? "bg-red-950/40 text-red-400 border border-red-800/50 hover:bg-red-900/50"
-                          : "bg-cyan-950/40 text-cyan-400 border border-cyan-800/50 hover:bg-cyan-900/50"
-                      }`}
+                      className={`inline-flex items-center justify-center gap-1.5 text-xs py-2 px-3 rounded-lg font-medium border transition ${buttonStyle}`}
                     >
                       Buka Link Asli <ExternalLink className="w-3.5 h-3.5" />
                     </a>
