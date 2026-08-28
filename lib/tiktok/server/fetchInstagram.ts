@@ -17,7 +17,7 @@ export async function fetchInstagramData(
   let title = `Instagram Reel (${shortcode})`;
   let coverUrl = "";
 
-  // 1. Scraping langsung meta tags Instagram (Server-Side)
+  // 1. Coba Scraping HTML Meta Tags (Server-Side)
   try {
     const res = await fetch(`https://www.instagram.com/p/${shortcode}/`, {
       headers: {
@@ -31,19 +31,15 @@ export async function fetchInstagramData(
 
     if (res.ok) {
       const html = await res.text();
-
-      // Ekstraksi og:title (biasanya berisi caption & username)
       const ogTitleMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]*)"/i);
       if (ogTitleMatch) {
         title = ogTitleMatch[1];
-        // Coba ekstrak username dari og:title format: "Name (@username) on Instagram..."
         const userMatch = title.match(/@([a-zA-Z0-9_.]+)/);
         if (userMatch) {
           authorName = userMatch[1].toLowerCase().trim();
         }
       }
 
-      // Ekstraksi og:image
       const ogImageMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]*)"/i);
       if (ogImageMatch) {
         coverUrl = ogImageMatch[1].replace(/&amp;/g, "&");
@@ -53,7 +49,7 @@ export async function fetchInstagramData(
     console.warn(`Direct scraping failed for shortcode ${shortcode}:`, err);
   }
 
-  // 2. Fallback jika HTML di-block, panggil oEmbed official tanpa proxy
+  // 2. Fallback Official oEmbed (Server-Side)
   if (!authorName) {
     try {
       const oembedRes = await fetch(
@@ -62,24 +58,38 @@ export async function fetchInstagramData(
       );
       if (oembedRes.ok) {
         const data = await oembedRes.json();
-        if (data.author_name) {
-          authorName = data.author_name.toLowerCase().trim();
-        }
-        if (data.title) {
-          title = data.title;
-        }
-        if (data.thumbnail_url) {
-          coverUrl = data.thumbnail_url;
-        }
+        if (data.author_name) authorName = data.author_name.toLowerCase().trim();
+        if (data.title) title = data.title;
+        if (data.thumbnail_url) coverUrl = data.thumbnail_url;
       }
     } catch (err) {
       console.warn(`Server oEmbed failed for shortcode ${shortcode}:`, err);
     }
   }
 
-  // Jika tetap gagal, lemparkan error agar ditangkap catch-block di route.ts
+  // 3. JIKA SERVER GAGAL (Terblokir Rate Limit / Private):
+  // Kembalikan objek 'error' & authorName 'unknown' agar page.tsx langsung menjalankan fetchInstagramDataClient di browser!
   if (!authorName) {
-    throw new Error("Gagal mengambil data Instagram (Private / Rate Limit)");
+    return {
+      id: shortcode,
+      platform: "instagram",
+      sourceUrl: cleanUrl,
+      videoUrl: cleanUrl,
+      title: `Instagram Reel (${shortcode})`,
+      authorName: "unknown",
+      authorDisplayName: "Unknown / Error",
+      authorUrl: cleanUrl,
+      authorAvatar: "",
+      coverUrl: "",
+      views: 0,
+      likes: 0,
+      comments: 0,
+      shares: 0,
+      saves: 0,
+      postedAt: "Terbaru",
+      status: "error",
+      errorMessage: "Membutuhkan parsing client-side",
+    };
   }
 
   const isQualified = cleanTargetHashtag
