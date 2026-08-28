@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchTikTokDataWithRetry } from "@/lib/tiktok/server/fetchTikTok";
 import { fetchYouTubeData } from "@/lib/tiktok/server/fetchYouTube";
+import { fetchInstagramData } from "@/lib/tiktok/server/fetchInstagram";
 import type { VideoBatchRequest, VideoBatchResponse, VideoItem } from "@/lib/tiktok/types";
 
 const MAX_BATCH_SIZE = 30;
@@ -112,6 +113,8 @@ export async function POST(request: Request) {
 
       const isYouTube =
         originalInputUrl.includes("youtube.com") || originalInputUrl.includes("youtu.be");
+      const isInstagram = originalInputUrl.includes("instagram.com");
+
       let videoData: VideoItem | null = null;
       let attempts = 0;
       const maxAttempts = 2; // Batas coba ulang jika terbentur rate limit
@@ -121,6 +124,11 @@ export async function POST(request: Request) {
           if (isYouTube) {
             const { cleanUrl } = sanitizeAndNormalizeUrl(originalInputUrl);
             videoData = await fetchYouTubeData(cleanUrl, cleanHashtag);
+            if (videoData) {
+              videoData.sourceUrl = originalInputUrl;
+            }
+          } else if (isInstagram) {
+            videoData = await fetchInstagramData(originalInputUrl, cleanHashtag);
             if (videoData) {
               videoData.sourceUrl = originalInputUrl;
             }
@@ -151,9 +159,13 @@ export async function POST(request: Request) {
           }
 
           // Fallback jika tetap gagal setelah diproses/retry
+          let detectedPlatform: "youtube" | "tiktok" | "instagram" = "tiktok";
+          if (isYouTube) detectedPlatform = "youtube";
+          if (isInstagram) detectedPlatform = "instagram";
+
           videoData = {
             id: originalInputUrl,
-            platform: isYouTube ? "youtube" : "tiktok",
+            platform: detectedPlatform,
             sourceUrl: originalInputUrl,
             videoUrl: originalInputUrl,
             title: "Gagal Memuat Video (Rate Limit API / Private)",

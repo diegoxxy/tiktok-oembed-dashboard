@@ -81,7 +81,7 @@ export const InputPanel: React.FC<InputPanelProps> = (props) => {
       }
 
       if (!extractedUrls || extractedUrls.length === 0) {
-        alert("Tidak ditemukan URL TikTok atau YouTube yang valid dalam file Excel/CSV tersebut.");
+        alert("Tidak ditemukan URL TikTok, YouTube, atau Instagram yang valid dalam file Excel/CSV tersebut.");
         return;
       }
 
@@ -96,7 +96,7 @@ export const InputPanel: React.FC<InputPanelProps> = (props) => {
       // Update local & parent state sekaligus
       handleUrlsChange(newText);
 
-      // Tampilkan notifikasi dinamis (TikTok & YouTube)
+      // Tampilkan notifikasi dinamis (TikTok, YouTube & Instagram)
       alert(summaryMessage);
 
       if (props.onImportSuccess) {
@@ -129,7 +129,7 @@ export const InputPanel: React.FC<InputPanelProps> = (props) => {
       <div>
         <div className="flex items-center justify-between mb-2">
           <label className="block text-xs font-bold tracking-wider text-slate-400 uppercase">
-            Daftar Link Video TikTok & YouTube (1 URL Per Baris)
+            Daftar Link Video TikTok, YouTube & Instagram (1 URL Per Baris)
           </label>
           <div>
             <input
@@ -153,7 +153,7 @@ export const InputPanel: React.FC<InputPanelProps> = (props) => {
           rows={6}
           value={rawUrls}
           onChange={(e) => handleUrlsChange(e.target.value)}
-          placeholder="https://www.tiktok.com/@username/video/123456789&#10;https://www.youtube.com/shorts/c7TRyQI15Qk"
+          placeholder={`https://www.tiktok.com/@username/video/123456789\nhttps://www.youtube.com/shorts/c7TRyQI15Qk\nhttps://www.instagram.com/reel/C12345678/`}
           className="w-full bg-[#0B0F19] border border-[#1E293B] rounded-lg p-4 text-xs font-mono text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition-colors resize-y"
         />
       </div>

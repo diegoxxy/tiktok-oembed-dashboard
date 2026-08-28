@@ -1,15 +1,13 @@
 import * as XLSX from "xlsx";
 
 /**
- * Membersihkan URL TikTok dari typo sintaks dan query string/parameter anti-bot
+ * Membersihkan URL media dari typo sintaks dan query string/parameter anti-bot
  */
-function cleanAndFixTikTokUrl(url: string): string {
+function cleanAndFixMediaUrl(url: string): string {
   let cleaned = url.trim().replace(/[;,\)\.]+$ /g, "");
 
-  // Fix typo missing slash after 'video' (misal: /video767643... -> /video/767643...)
+  // Fix typo missing slash atau double slash khusus TikTok
   cleaned = cleaned.replace(/\/video(\d+)/gi, "/video/$1");
-
-  // Fix typo double slash (misal: /video//7677... -> /video/7677...)
   cleaned = cleaned.replace(/\/video\/{2,}/gi, "/video/");
 
   // Hapus query parameter (misal: ?is_from_webapp=1&sender_device=pc)
@@ -25,16 +23,18 @@ export interface ParseResult {
   urls: string[];
   tiktokCount: number;
   youtubeCount: number;
+  instagramCount: number;
   totalCount: number;
   summaryMessage: string;
 }
 
 /**
- * Menghasilkan pesan notifikasi yang merinci jumlah link TikTok dan YouTube
+ * Menghasilkan pesan notifikasi yang merinci jumlah link TikTok, YouTube, dan Instagram
  */
 export function getImportSummary(urls: string[]): ParseResult {
   let tiktokCount = 0;
   let youtubeCount = 0;
+  let instagramCount = 0;
 
   urls.forEach((url) => {
     const lower = url.toLowerCase();
@@ -42,16 +42,19 @@ export function getImportSummary(urls: string[]): ParseResult {
       tiktokCount++;
     } else if (lower.includes("youtube.com") || lower.includes("youtu.be")) {
       youtubeCount++;
+    } else if (lower.includes("instagram.com")) {
+      instagramCount++;
     }
   });
 
   const parts: string[] = [];
   if (tiktokCount > 0) parts.push(`${tiktokCount} link TikTok`);
   if (youtubeCount > 0) parts.push(`${youtubeCount} link YouTube`);
+  if (instagramCount > 0) parts.push(`${instagramCount} link Instagram`);
 
   let summaryMessage = "Berhasil mengimpor ";
   if (parts.length > 0) {
-    summaryMessage += parts.join(" dan ") + "!";
+    summaryMessage += parts.join(", ") + "!";
   } else {
     summaryMessage = `Berhasil mengimpor ${urls.length} link!`;
   }
@@ -60,6 +63,7 @@ export function getImportSummary(urls: string[]): ParseResult {
     urls,
     tiktokCount,
     youtubeCount,
+    instagramCount,
     totalCount: urls.length,
     summaryMessage,
   };
@@ -84,8 +88,8 @@ export async function parseImportFile(file: File): Promise<ParseResult> {
         const jsonRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
         const extractedUrls: string[] = [];
 
-        // Regex fleksibel menangkap TikTok & YouTube
-        const mediaRegex = /https?:\/\/(?:www\.|vt\.|vm\.)?(?:tiktok\.com|youtube\.com|youtu\.be)\/[^\s"',]+/gi;
+        // Regex fleksibel menangkap TikTok, YouTube & Instagram
+        const mediaRegex = /https?:\/\/(?:www\.|vt\.|vm\.)?(?:tiktok\.com|youtube\.com|youtu\.be|instagram\.com)\/[^\s"',]+/gi;
 
         jsonRows.forEach((row) => {
           if (Array.isArray(row)) {
@@ -95,7 +99,7 @@ export async function parseImportFile(file: File): Promise<ParseResult> {
                 const matches = cellStr.match(mediaRegex);
                 if (matches) {
                   matches.forEach((url) => {
-                    const cleanUrl = cleanAndFixTikTokUrl(url);
+                    const cleanUrl = cleanAndFixMediaUrl(url);
                     if (cleanUrl) {
                       extractedUrls.push(cleanUrl);
                     }

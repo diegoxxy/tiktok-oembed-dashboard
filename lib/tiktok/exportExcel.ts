@@ -75,7 +75,7 @@ export function exportResultToExcel(result: AnalysisResult, fileNamePrefix = "ca
     ]),
   ];
   const videoSheet = XLSX.utils.aoa_to_sheet(videoRows);
-  videoSheet["!cols"] = [{ wch: 10 }, { wch: 14 }, { wch: 20 }, { wch: 50 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 45 }];
+  videoSheet["!cols"] = [{ wch: 12 }, { wch: 14 }, { wch: 20 }, { wch: 50 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 45 }];
   XLSX.utils.book_append_sheet(wb, videoSheet, "Detail Video");
 
   const stamp = new Date().toISOString().slice(0, 10);
