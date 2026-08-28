@@ -102,7 +102,8 @@ export default function Home() {
   // Helper untuk memperkaya data Instagram melalui client-side fallback
   const enrichInstagramVideo = useCallback(
     async (v: VideoItem, cleanHashtag: string): Promise<VideoItem> => {
-      const isInstagramLink = v.sourceUrl.includes("instagram.com") || v.platform === "instagram";
+      const isInstagramLink =
+        v.sourceUrl.includes("instagram.com") || v.platform === "instagram";
 
       if (isInstagramLink) {
         const clientData = await fetchInstagramDataClient(v.sourceUrl);
@@ -122,7 +123,7 @@ export default function Home() {
             title: captionText,
             likes: clientData.likes || v.likes,
             coverUrl: clientData.thumbnail || v.coverUrl,
-            status: (isQualified ? "qualified" : "unqualified") as VideoStatus,
+            status: isQualified ? "qualified" : "unqualified",
             errorMessage: undefined,
           };
         }
