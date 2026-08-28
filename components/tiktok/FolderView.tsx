@@ -12,49 +12,65 @@ export default function FolderView({ creators, onUpdateVideo }: FolderViewProps)
   const [selectedCreator, setSelectedCreator] = useState<CreatorGroup | null>(null);
   const [editingVideo, setEditingVideo] = useState<VideoItem | null>(null);
 
-  // Form State
+  // Form State untuk semua metrik + Username
   const [editAuthor, setEditAuthor] = useState("");
   const [editViews, setEditViews] = useState<number>(0);
   const [editLikes, setEditLikes] = useState<number>(0);
+  const [editComments, setEditComments] = useState<number>(0);
+  const [editShares, setEditShares] = useState<number>(0);
+  const [editSaves, setEditSaves] = useState<number>(0);
 
   const handleOpenEdit = (v: VideoItem) => {
     setEditingVideo(v);
     setEditAuthor(v.authorName === "instagram_creator" ? "" : v.authorName);
-    setEditViews(v.views);
-    setEditLikes(v.likes);
+    setEditViews(v.views || 0);
+    setEditLikes(v.likes || 0);
+    setEditComments(v.comments || 0);
+    setEditShares(v.shares || 0);
+    setEditSaves(v.saves || 0);
   };
 
   const handleSaveEdit = () => {
     if (!editingVideo) return;
 
     const newUsername = editAuthor.trim().toLowerCase().replace(/^@/, "");
+    const finalAuthor = newUsername || editingVideo.authorName;
 
     const updated: VideoItem = {
       ...editingVideo,
-      authorName: newUsername || editingVideo.authorName,
-      authorDisplayName: newUsername ? `@${newUsername}` : editingVideo.authorDisplayName,
-      authorUrl: newUsername ? `https://www.instagram.com/${newUsername}` : editingVideo.authorUrl,
+      authorName: finalAuthor,
+      authorDisplayName: `@${finalAuthor}`,
+      authorUrl: editingVideo.sourceUrl.includes("instagram.com")
+        ? `https://www.instagram.com/${finalAuthor}`
+        : editingVideo.authorUrl,
       views: Number(editViews) || 0,
       likes: Number(editLikes) || 0,
+      comments: Number(editComments) || 0,
+      shares: Number(editShares) || 0,
+      saves: Number(editSaves) || 0,
       status: "qualified",
     };
 
-    // Callback ke parent app/page.tsx
+    // Forward ke parent app/page.tsx
     if (onUpdateVideo) {
       onUpdateVideo(updated);
     }
 
-    // Update lokal state folder tampilan saat ini
+    // Update state folder lokal yang sedang dibuka
     if (selectedCreator) {
       const updatedVideos = selectedCreator.videos.map((vid) =>
         vid.id === updated.id ? updated : vid
       );
       setSelectedCreator({
         ...selectedCreator,
-        authorName: newUsername || selectedCreator.authorName,
+        authorName: finalAuthor,
+        authorDisplayName: `@${finalAuthor}`,
         videos: updatedVideos,
-        totalViews: updatedVideos.reduce((a, b) => a + b.views, 0),
-        totalLikes: updatedVideos.reduce((a, b) => a + b.likes, 0),
+        totalViews: updatedVideos.reduce((a, b) => a + (b.views || 0), 0),
+        totalLikes: updatedVideos.reduce((a, b) => a + (b.likes || 0), 0),
+        totalComments: updatedVideos.reduce((a, b) => a + (b.comments || 0), 0),
+        totalShares: updatedVideos.reduce((a, b) => a + (b.shares || 0), 0),
+        totalSaves: updatedVideos.reduce((a, b) => a + (b.saves || 0), 0),
       });
     }
 
@@ -71,10 +87,11 @@ export default function FolderView({ creators, onUpdateVideo }: FolderViewProps)
           ← Kembali ke Semua Folder Kreator
         </button>
 
+        {/* Header Folder Kreator */}
         <div className="bg-[#111827] border border-[#1e293b] rounded-xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-cyan-950/60 border border-cyan-800/50 flex items-center justify-center text-cyan-400 text-xl font-bold">
-              @{selectedCreator.authorName.slice(0, 2).toUpperCase()}
+            <div className="w-16 h-16 rounded-full bg-cyan-950/60 border border-cyan-800/50 flex items-center justify-center text-cyan-400 text-xl font-bold uppercase">
+              @{selectedCreator.authorName.slice(0, 2)}
             </div>
             <div>
               <h2 className="text-xl font-bold text-white">@{selectedCreator.authorName}</h2>
@@ -83,7 +100,7 @@ export default function FolderView({ creators, onUpdateVideo }: FolderViewProps)
           </div>
         </div>
 
-        {/* List Card Video */}
+        {/* Grid Card Video */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {selectedCreator.videos.map((v) => (
             <div
@@ -102,9 +119,28 @@ export default function FolderView({ creators, onUpdateVideo }: FolderViewProps)
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 text-xs text-slate-300 bg-slate-900/50 p-3 rounded-lg border border-slate-800">
-                <div>👁️ Views: <strong className="text-amber-400">{v.views.toLocaleString("id-ID")}</strong></div>
-                <div>❤️ Likes: <strong className="text-rose-400">{v.likes.toLocaleString("id-ID")}</strong></div>
+              {/* Tampilan Metrik Lengkap */}
+              <div className="grid grid-cols-3 md:grid-cols-5 gap-2 text-[11px] text-slate-300 bg-slate-900/50 p-3 rounded-lg border border-slate-800 text-center">
+                <div>
+                  <span className="block text-[10px] text-slate-500">Views</span>
+                  <strong className="text-amber-400">{v.views.toLocaleString("id-ID")}</strong>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-slate-500">Likes</span>
+                  <strong className="text-rose-400">{(v.likes || 0).toLocaleString("id-ID")}</strong>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-slate-500">Comments</span>
+                  <strong className="text-cyan-400">{(v.comments || 0).toLocaleString("id-ID")}</strong>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-slate-500">Shares</span>
+                  <strong className="text-emerald-400">{(v.shares || 0).toLocaleString("id-ID")}</strong>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-slate-500">Saves</span>
+                  <strong className="text-purple-400">{(v.saves || 0).toLocaleString("id-ID")}</strong>
+                </div>
               </div>
 
               <div className="flex items-center gap-2">
@@ -127,16 +163,16 @@ export default function FolderView({ creators, onUpdateVideo }: FolderViewProps)
           ))}
         </div>
 
-        {/* Modal Edit */}
+        {/* Modal Edit Data */}
         {editingVideo && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-[#111827] border border-[#1e293b] p-6 rounded-xl max-w-md w-full space-y-4">
-              <h3 className="text-base font-bold text-white">Edit Data Video Manual</h3>
+            <div className="bg-[#111827] border border-[#1e293b] p-6 rounded-xl max-w-lg w-full space-y-4">
+              <h3 className="text-base font-bold text-white">Edit Data Video & Username</h3>
               <p className="text-xs text-slate-400 truncate">{editingVideo.sourceUrl}</p>
 
               <div className="space-y-3">
                 <div>
-                  <label className="text-xs text-slate-300 block mb-1">Username Creator Instagram</label>
+                  <label className="text-xs text-slate-300 block mb-1">Username Creator</label>
                   <input
                     type="text"
                     placeholder="Contoh: nama_creator"
@@ -145,21 +181,52 @@ export default function FolderView({ creators, onUpdateVideo }: FolderViewProps)
                     className="w-full bg-[#0b0f19] border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-cyan-500"
                   />
                 </div>
-                <div>
-                  <label className="text-xs text-slate-300 block mb-1">Jumlah Views</label>
-                  <input
-                    type="number"
-                    value={editViews}
-                    onChange={(e) => setEditViews(Number(e.target.value))}
-                    className="w-full bg-[#0b0f19] border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-cyan-500"
-                  />
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-slate-300 block mb-1">Views</label>
+                    <input
+                      type="number"
+                      value={editViews}
+                      onChange={(e) => setEditViews(Number(e.target.value))}
+                      className="w-full bg-[#0b0f19] border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-300 block mb-1">Likes</label>
+                    <input
+                      type="number"
+                      value={editLikes}
+                      onChange={(e) => setEditLikes(Number(e.target.value))}
+                      className="w-full bg-[#0b0f19] border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-300 block mb-1">Comments</label>
+                    <input
+                      type="number"
+                      value={editComments}
+                      onChange={(e) => setEditComments(Number(e.target.value))}
+                      className="w-full bg-[#0b0f19] border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-300 block mb-1">Shares</label>
+                    <input
+                      type="number"
+                      value={editShares}
+                      onChange={(e) => setEditShares(Number(e.target.value))}
+                      className="w-full bg-[#0b0f19] border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+                    />
+                  </div>
                 </div>
+
                 <div>
-                  <label className="text-xs text-slate-300 block mb-1">Jumlah Likes</label>
+                  <label className="text-xs text-slate-300 block mb-1">Saves</label>
                   <input
                     type="number"
-                    value={editLikes}
-                    onChange={(e) => setEditLikes(Number(e.target.value))}
+                    value={editSaves}
+                    onChange={(e) => setEditSaves(Number(e.target.value))}
                     className="w-full bg-[#0b0f19] border border-slate-800 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-cyan-500"
                   />
                 </div>
@@ -196,8 +263,8 @@ export default function FolderView({ creators, onUpdateVideo }: FolderViewProps)
         >
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-cyan-950 border border-cyan-800 flex items-center justify-center text-cyan-400 font-bold text-sm">
-                @{c.authorName.slice(0, 2).toUpperCase()}
+              <div className="w-10 h-10 rounded-full bg-cyan-950 border border-cyan-800 flex items-center justify-center text-cyan-400 font-bold text-sm uppercase">
+                @{c.authorName.slice(0, 2)}
               </div>
               <div>
                 <h3 className="text-sm font-bold text-white truncate max-w-[150px]">
