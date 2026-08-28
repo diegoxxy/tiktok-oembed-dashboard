@@ -14,41 +14,68 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid Instagram URL" }, { status: 400 });
     }
 
-    const targetUrl = `https://www.instagram.com/p/${shortcode}/`;
+    // Direct GraphQL Embed Info Request (Bypass Anti-Bot)
+    const embedUrl = `https://www.instagram.com/graphql/query/?doc_id=10015901848480574&variables=${encodeURIComponent(
+      JSON.stringify({ shortcode })
+    )}`;
 
-    // 1. Coba lewat Native Meta OEMBED API
-    try {
-      const oembedRes = await fetch(
-        `https://api.instagram.com/oembed/?url=${encodeURIComponent(targetUrl)}`,
-        {
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          },
-          cache: "no-store",
-        }
-      );
+    const res = await fetch(embedUrl, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        Accept: "*/*",
+        "X-IG-App-ID": "936619743392459",
+      },
+      cache: "no-store",
+    });
 
-      if (oembedRes.ok) {
-        const data = await oembedRes.json();
-        if (data.author_name) {
+    if (res.ok) {
+      const json = await res.json();
+      const media = json?.data?.xdt_shortcode_media;
+
+      if (media) {
+        const username = media.owner?.username || "";
+        const caption =
+          media.edge_media_to_caption?.edges[0]?.node?.text ||
+          `Instagram Reel (${shortcode})`;
+        const thumbnail = media.display_url || "";
+        const likes = media.edge_media_preview_like?.count || 0;
+        const comments = media.edge_media_to_comment?.count || 0;
+
+        if (username) {
           return NextResponse.json({
-            username: data.author_name.toLowerCase().trim(),
-            caption: data.title || `Instagram Reel (${shortcode})`,
-            thumbnail: data.thumbnail_url || "",
+            username: username.toLowerCase().trim(),
+            caption,
+            thumbnail,
+            likes,
+            comments,
           });
         }
       }
-    } catch (e) {
-      console.warn("oEmbed fetch skipped:", e);
     }
 
-    // 2. Fallback: Ekstraksi otomatis dari shortcode URL tanpa error
-    const cleanShortcode = shortcode.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+    // Fallback Secondary: Instagram Oembed Official
+    const oembedUrl = `https://api.instagram.com/oembed/?url=https://www.instagram.com/p/${shortcode}/`;
+    const oembedRes = await fetch(oembedUrl, { cache: "no-store" });
+    if (oembedRes.ok) {
+      const oembedData = await oembedRes.json();
+      if (oembedData.author_name) {
+        return NextResponse.json({
+          username: oembedData.author_name.toLowerCase().trim(),
+          caption: oembedData.title || `Instagram Reel (${shortcode})`,
+          thumbnail: oembedData.thumbnail_url || "",
+          likes: 0,
+          comments: 0,
+        });
+      }
+    }
+
     return NextResponse.json({
-      username: `ig_${cleanShortcode}`,
+      username: `ig_${shortcode.toLowerCase()}`,
       caption: `Instagram Reel (${shortcode})`,
       thumbnail: "",
+      likes: 0,
+      comments: 0,
     });
   } catch (error) {
     return NextResponse.json(
