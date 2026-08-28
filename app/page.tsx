@@ -7,6 +7,7 @@ import type {
   VideoBatchResponse,
   VideoItem,
   VideoSortKey,
+  VideoStatus,
   ViewMode,
 } from "@/lib/tiktok/types";
 import { chunkArray } from "@/lib/tiktok/chunk";
@@ -104,7 +105,7 @@ export default function Home() {
     setLoading(true);
     setAllVideos([]);
 
-    const cleanHashtag = targetHashtag.replace(/^#/, "").trim();
+    const cleanHashtag = targetHashtag.replace(/^#/, "").trim().toLowerCase();
     const urls = parseUrlsFromText(urlsInput);
 
     const chunks = chunkArray(urls, 5);
@@ -134,21 +135,32 @@ export default function Home() {
         }
 
         if (data.videos) {
-          // Client-side enrichment khusus Instagram
           const processedVideos = await Promise.all(
             data.videos.map(async (v: VideoItem) => {
-              if (v.platform === "instagram") {
+              const isUnknown =
+                !v.authorName ||
+                v.authorName.toLowerCase() === "unknown" ||
+                v.authorName.startsWith("ig_");
+
+              if (v.platform === "instagram" && (v.status === "error" || isUnknown)) {
                 const clientData = await fetchInstagramDataClient(v.sourceUrl);
                 if (clientData && clientData.username) {
                   const cleanUsername = clientData.username.toLowerCase().trim();
+                  const captionText = clientData.caption || v.title;
+                  const isQualified = cleanHashtag
+                    ? captionText.toLowerCase().includes(`#${cleanHashtag}`)
+                    : true;
+
                   return {
                     ...v,
                     authorName: cleanUsername,
                     authorDisplayName: clientData.username,
                     authorUrl: `https://www.instagram.com/${cleanUsername}`,
-                    title: clientData.caption || v.title,
+                    title: captionText,
                     likes: clientData.likes || v.likes,
                     coverUrl: clientData.thumbnail || v.coverUrl,
+                    status: (isQualified ? "qualified" : "unqualified") as VideoStatus,
+                    errorMessage: undefined,
                   };
                 }
               }
@@ -158,11 +170,42 @@ export default function Home() {
 
           setAllVideos((prev) => [...prev, ...processedVideos]);
           collectedVideos.push(...processedVideos);
-          toCache.push(...processedVideos.map((v: VideoItem) => ({ sourceUrl: v.sourceUrl, video: v })));
+          toCache.push(
+            ...processedVideos.map((v: VideoItem) => ({ sourceUrl: v.sourceUrl, video: v }))
+          );
         }
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : "Gagal menghubungi server";
-        const errored = chunk.map((u: string) => makeErrorVideo(u, errorMessage));
+
+        const errored = await Promise.all(
+          chunk.map(async (u: string) => {
+            const fallbackVideo = makeErrorVideo(u, errorMessage);
+            if (fallbackVideo.platform === "instagram") {
+              const clientData = await fetchInstagramDataClient(u);
+              if (clientData && clientData.username) {
+                const cleanUsername = clientData.username.toLowerCase().trim();
+                const captionText = clientData.caption || fallbackVideo.title;
+                const isQualified = cleanHashtag
+                  ? captionText.toLowerCase().includes(`#${cleanHashtag}`)
+                  : true;
+
+                return {
+                  ...fallbackVideo,
+                  authorName: cleanUsername,
+                  authorDisplayName: clientData.username,
+                  authorUrl: `https://www.instagram.com/${cleanUsername}`,
+                  title: captionText,
+                  likes: clientData.likes || fallbackVideo.likes,
+                  coverUrl: clientData.thumbnail || fallbackVideo.coverUrl,
+                  status: (isQualified ? "qualified" : "unqualified") as VideoStatus,
+                  errorMessage: undefined,
+                };
+              }
+            }
+            return fallbackVideo;
+          })
+        );
+
         setAllVideos((prev) => [...prev, ...errored]);
         collectedVideos.push(...errored);
       }
@@ -313,7 +356,7 @@ export default function Home() {
               minViews={minViewsInput}
               onMinViewsChange={setMinViewsInput}
               viewMode={viewMode}
-              onViewModeChange={setViewMode}
+              onViewModeChange={(mode) => setViewMode(mode)}
               videoSort={videoSort}
               onVideoSortChange={setVideoSort}
               creatorSort={creatorSort}
