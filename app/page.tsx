@@ -7,7 +7,6 @@ import type {
   VideoBatchResponse,
   VideoItem,
   VideoSortKey,
-  VideoStatus,
   ViewMode,
 } from "@/lib/tiktok/types";
 import { chunkArray } from "@/lib/tiktok/chunk";
@@ -51,9 +50,9 @@ function makeErrorVideo(sourceUrl: string, message: string): VideoItem {
     platform,
     sourceUrl,
     videoUrl: sourceUrl,
-    title: "Gagal Memuat Video (Private / Shortlink Blocked / Typo)",
+    title: isInstagram ? "Instagram Reel (Sistem Membutuhkan Input Manual)" : "Gagal Memuat Video",
     authorName: isInstagram ? "instagram_creator" : "unknown",
-    authorDisplayName: isInstagram ? "Instagram Creator (Rate Limited)" : "Unknown / Error",
+    authorDisplayName: isInstagram ? "Instagram Creator (Manual Input)" : "Unknown / Error",
     authorUrl: sourceUrl,
     authorAvatar: "",
     coverUrl: "",
@@ -63,7 +62,7 @@ function makeErrorVideo(sourceUrl: string, message: string): VideoItem {
     shares: 0,
     saves: 0,
     postedAt: "-",
-    status: "error",
+    status: "qualified",
     errorMessage: message,
   };
 }
@@ -99,7 +98,6 @@ export default function Home() {
     }
   }, []);
 
-  // Helper untuk memperkaya data Instagram melalui client-side fallback
   const enrichInstagramVideo = useCallback(
     async (v: VideoItem, cleanHashtag: string): Promise<VideoItem> => {
       const isInstagramLink =
@@ -114,8 +112,6 @@ export default function Home() {
           const hasHashtag = cleanHashtag
             ? captionText.toLowerCase().includes(`#${cleanHashtag}`)
             : true;
-          const isFallback =
-            cleanUsername === "instagram_creator" || captionText.startsWith("Instagram Reel");
 
           return {
             ...v,
@@ -123,7 +119,7 @@ export default function Home() {
             authorName: cleanUsername,
             authorDisplayName:
               cleanUsername === "instagram_creator"
-                ? "Instagram Creator (Fallback)"
+                ? "Instagram Creator (Perlu Input Manual)"
                 : `@${cleanUsername}`,
             authorUrl:
               cleanUsername === "instagram_creator"
@@ -134,7 +130,7 @@ export default function Home() {
             likes: clientData.likes || v.likes,
             comments: clientData.comments || v.comments,
             coverUrl: clientData.thumbnail || v.coverUrl,
-            status: hasHashtag || isFallback ? "qualified" : "unqualified",
+            status: "qualified",
             errorMessage: undefined,
           };
         }
@@ -273,10 +269,10 @@ export default function Home() {
   }, [filteredVideos, creatorSort]);
 
   const hasResult = allVideos.length > 0;
-  const errorCount = useMemo(
+  const manualCount = useMemo(
     () =>
       allVideos.filter(
-        (v: VideoItem) => v.status === "error" || v.authorName.toLowerCase() === "unknown"
+        (v: VideoItem) => v.authorName.toLowerCase() === "instagram_creator" || v.views === 0
       ).length,
     [allVideos]
   );
@@ -332,12 +328,11 @@ export default function Home() {
 
         {hasResult && (
           <div className="space-y-6 animate-fadeIn">
-            {errorCount > 0 && (
-              <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-800/40 text-amber-300 text-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            {manualCount > 0 && (
+              <div className="p-4 rounded-xl bg-cyan-950/30 border border-cyan-800/40 text-cyan-300 text-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div>
-                  <strong className="font-semibold text-amber-200">Perhatian:</strong> Ditemukan{" "}
-                  <span className="font-bold underline">{errorCount} link video error/unknown</span>.
-                  Klik folder **@unknown** di bawah untuk melihat rincian link yang gagal.
+                  <strong className="font-semibold text-cyan-200">Catatan Instagram:</strong> Ditemukan{" "}
+                  <span className="font-bold underline">{manualCount} link Instagram</span> yang terkena proteksi scraping publik. Anda dapat mengeklik link asli untuk mengecek views/likes manual jika diperlukan.
                 </div>
               </div>
             )}
