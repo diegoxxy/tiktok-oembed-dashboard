@@ -1,37 +1,27 @@
 import { NextResponse } from "next/server";
 import { fetchTikTokDataWithRetry } from "@/lib/tiktok/server/fetchTikTok";
 import { fetchYouTubeData } from "@/lib/tiktok/server/fetchYouTube";
-import { fetchInstagramData } from "@/lib/tiktok/server/fetchInstagram";
+import { fetchInstagramDataClient } from "@/lib/tiktok/server/fetchInstagram";
 import type { VideoBatchRequest, VideoBatchResponse, VideoItem } from "@/lib/tiktok/types";
 
 const MAX_BATCH_SIZE = 30;
 
-/**
- * Normalisasi URL TikTok:
- * 1. Menghilangkan query params.
- * 2. Memperbaiki typo penulisan path slash (/video767... -> /video/767...).
- * 3. Menetralkan username typo dengan mengekstrak Video ID secara presisi.
- */
 function sanitizeAndNormalizeUrl(url: string): { cleanUrl: string; videoId: string | null } {
   let cleaned = url.trim();
 
-  // Fix typo missing slash atau double slash pada /video/
   cleaned = cleaned.replace(/\/video(\d+)/gi, "/video/$1");
   cleaned = cleaned.replace(/\/video\/{2,}/gi, "/video/");
 
-  // Hapus query parameters (?is_from_webapp=1, dll)
   try {
     const parsed = new URL(cleaned);
     cleaned = `${parsed.origin}${parsed.pathname}`;
   } catch {
-    // Apabila bukan URL valid, kembalikan string awal
+    // Abaikan jika bukan URL valid
   }
 
-  // Ekstraksi Video ID TikTok jika ada (19 digit angka)
   const tiktokIdMatch = cleaned.match(/\/video\/(\d+)/i);
   const videoId = tiktokIdMatch ? tiktokIdMatch[1] : null;
 
-  // Jika terdapat Video ID, buat URL canonical netral untuk menghindari error typo username
   if (
     videoId &&
     (cleaned.includes("tiktok.com") ||
@@ -44,14 +34,10 @@ function sanitizeAndNormalizeUrl(url: string): { cleanUrl: string; videoId: stri
   return { cleanUrl: cleaned, videoId };
 }
 
-/**
- * Resolve URL pendek (vt.tiktok.com / vm.tiktok.com) secara mendalam
- */
 async function resolveTikTokUrl(url: string): Promise<string> {
   const trimmedUrl = url.trim();
   if (!trimmedUrl) return "";
 
-  // Jika URL berupa shortlink vt/vm.tiktok.com
   if (trimmedUrl.includes("vt.tiktok.com") || trimmedUrl.includes("vm.tiktok.com")) {
     try {
       const response = await fetch(trimmedUrl, {
@@ -103,8 +89,6 @@ export async function POST(request: Request) {
     }
 
     const cleanHashtag = targetHashtag.toLowerCase().replace("#", "").trim();
-
-    // Proses fetch setiap URL
     const videos: VideoItem[] = [];
 
     for (let i = 0; i < videoUrls.length; i++) {
@@ -117,7 +101,7 @@ export async function POST(request: Request) {
 
       let videoData: VideoItem | null = null;
       let attempts = 0;
-      const maxAttempts = 2; // Batas coba ulang jika terbentur rate limit
+      const maxAttempts = 2;
 
       while (attempts < maxAttempts) {
         try {
@@ -128,9 +112,34 @@ export async function POST(request: Request) {
               videoData.sourceUrl = originalInputUrl;
             }
           } else if (isInstagram) {
-            videoData = await fetchInstagramData(originalInputUrl, cleanHashtag);
-            if (videoData) {
-              videoData.sourceUrl = originalInputUrl;
+            // Menggunakan fetchInstagramDataClient langsung
+            const igData = await fetchInstagramDataClient(originalInputUrl);
+            if (igData && igData.username) {
+              const isQualified = cleanHashtag
+                ? igData.caption.toLowerCase().includes(`#${cleanHashtag}`)
+                : true;
+
+              videoData = {
+                id: originalInputUrl,
+                platform: "instagram",
+                sourceUrl: originalInputUrl,
+                videoUrl: originalInputUrl,
+                title: igData.caption || `Instagram Reel`,
+                authorName: igData.username,
+                authorDisplayName: igData.username,
+                authorUrl: `https://www.instagram.com/${igData.username}`,
+                authorAvatar: "",
+                coverUrl: igData.thumbnail || "",
+                views: igData.views || 0,
+                likes: igData.likes || 0,
+                comments: igData.comments || 0,
+                shares: 0,
+                saves: 0,
+                postedAt: "Terbaru",
+                status: isQualified ? "qualified" : "unqualified",
+              };
+            } else {
+              throw new Error("Gagal mengambil data Instagram");
             }
           } else {
             const resolvedUrl = await resolveTikTokUrl(originalInputUrl);
@@ -143,7 +152,7 @@ export async function POST(request: Request) {
               throw new Error("Data video kosong / Private");
             }
           }
-          break; // Sukses, keluar dari loop retry
+          break;
         } catch (err) {
           attempts++;
           const errMessage = err instanceof Error ? err.message : "";
@@ -152,13 +161,11 @@ export async function POST(request: Request) {
             errMessage.includes("429") ||
             errMessage.toLowerCase().includes("limit");
 
-          // Jika terbentur rate limit (403/429), beri jeda ekstra 2.5 detik lalu coba lagi
           if (isRateLimit && attempts < maxAttempts) {
             await delay(2500);
             continue;
           }
 
-          // Fallback jika tetap gagal setelah diproses/retry
           let detectedPlatform: "youtube" | "tiktok" | "instagram" = "tiktok";
           if (isYouTube) detectedPlatform = "youtube";
           if (isInstagram) detectedPlatform = "instagram";
@@ -190,7 +197,6 @@ export async function POST(request: Request) {
         videos.push(videoData);
       }
 
-      // Jeda aman 1.25 detik antarekstraksi untuk mematuhi aturan 1 req/sec
       if (i < videoUrls.length - 1) {
         await delay(1250);
       }

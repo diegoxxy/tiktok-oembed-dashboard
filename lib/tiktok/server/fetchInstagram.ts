@@ -1,93 +1,67 @@
-import type { VideoItem } from "../types";
+export interface InstagramClientMetric {
+  username: string;
+  views: number;
+  likes: number;
+  comments: number;
+  caption: string;
+  thumbnail: string;
+}
 
-export async function fetchInstagramData(
-  url: string,
-  targetHashtag: string
-): Promise<VideoItem | null> {
-  const cleanUrl = url.trim();
-  const match = cleanUrl.match(/\/(?:p|reel|reels)\/([A-Za-z0-9_-]+)/);
+export async function fetchInstagramDataClient(url: string): Promise<InstagramClientMetric | null> {
+  const match = url.match(/\/(?:p|reel|reels)\/([A-Za-z0-9_-]+)/);
   const shortcode = match ? match[1] : null;
+  if (!shortcode) return null;
 
-  if (!shortcode) {
-    throw new Error("URL Instagram tidak valid");
-  }
+  const targetUrl = `https://www.instagram.com/p/${shortcode}/`;
 
-  const cleanTargetHashtag = targetHashtag.toLowerCase().replace("#", "").trim();
-
-  let authorName = "";
-  let authorDisplayName = "";
-  let title = `Instagram Reel (${shortcode})`;
-  let coverUrl = "";
-
-  // 1. Coba fetch oEmbed publik dari server
+  // 1. Menggunakan CORS Proxy AllOrigins untuk oEmbed Official
   try {
-    const oembedUrl = `https://api.instagram.com/oembed/?url=${encodeURIComponent(
-      `https://www.instagram.com/p/${shortcode}/`
-    )}`;
-    const res = await fetch(oembedUrl, { cache: "no-store" });
-
+    const oembedOfficial = `https://api.instagram.com/oembed/?url=${encodeURIComponent(targetUrl)}`;
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(oembedOfficial)}`;
+    
+    const res = await fetch(proxyUrl);
     if (res.ok) {
-      const data = await res.json();
-      if (data.author_name) {
-        authorName = data.author_name.toLowerCase().trim();
-        authorDisplayName = data.author_name.trim();
-      }
-      if (data.title) {
-        title = data.title;
-      }
-      if (data.thumbnail_url) {
-        coverUrl = data.thumbnail_url;
+      const wrapper = await res.json();
+      if (wrapper.contents) {
+        const data = JSON.parse(wrapper.contents);
+        if (data.author_name) {
+          return {
+            username: data.author_name.toLowerCase().trim(),
+            caption: data.title || "",
+            views: 0,
+            likes: 0,
+            comments: 0,
+            thumbnail: data.thumbnail_url || "",
+          };
+        }
       }
     }
   } catch (err) {
-    console.warn(`Server oEmbed failed for shortcode ${shortcode}:`, err);
+    console.warn("Client oEmbed via AllOrigins failed:", err);
   }
 
-  // 2. Jika server terblokir, kembalikan status "unknown" untuk diproses oleh Client-Side Enrichment
-  if (!authorName) {
-    return {
-      id: shortcode,
-      platform: "instagram",
-      sourceUrl: cleanUrl,
-      videoUrl: cleanUrl,
-      title: `Instagram Reel (${shortcode})`,
-      authorName: "unknown",
-      authorDisplayName: "Unknown / Error",
-      authorUrl: cleanUrl,
-      authorAvatar: "",
-      coverUrl: "",
-      views: 0,
-      likes: 0,
-      comments: 0,
-      shares: 0,
-      saves: 0,
-      postedAt: "Terbaru",
-      status: "error",
-      errorMessage: "Membutuhkan parsing client-side",
-    };
+  // 2. Fallback Secondary Proxy (corsproxy.io)
+  try {
+    const oembedOfficial = `https://api.instagram.com/oembed/?url=${encodeURIComponent(targetUrl)}`;
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(oembedOfficial)}`;
+
+    const res = await fetch(proxyUrl);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.author_name) {
+        return {
+          username: data.author_name.toLowerCase().trim(),
+          caption: data.title || "",
+          views: 0,
+          likes: 0,
+          comments: 0,
+          thumbnail: data.thumbnail_url || "",
+        };
+      }
+    }
+  } catch (err) {
+    console.warn("Client oEmbed via CORSProxy failed:", err);
   }
 
-  const isQualified = cleanTargetHashtag
-    ? title.toLowerCase().includes(`#${cleanTargetHashtag}`)
-    : true;
-
-  return {
-    id: shortcode,
-    platform: "instagram",
-    sourceUrl: cleanUrl,
-    videoUrl: cleanUrl,
-    title,
-    authorName,
-    authorDisplayName,
-    authorUrl: `https://www.instagram.com/${authorName}`,
-    authorAvatar: "",
-    coverUrl,
-    views: 0,
-    likes: 0,
-    comments: 0,
-    shares: 0,
-    saves: 0,
-    postedAt: "Terbaru",
-    status: isQualified ? "qualified" : "unqualified",
-  };
+  return null;
 }
