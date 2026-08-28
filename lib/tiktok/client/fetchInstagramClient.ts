@@ -11,14 +11,14 @@ export interface InstagramClientMetric {
  * Robust Client-side Instagram Extractor
  */
 export async function fetchInstagramDataClient(url: string): Promise<InstagramClientMetric | null> {
-  // Regex diperbarui untuk mencakup semua karakter shortcode Instagram (termasuk trailing slash)
+  // Regex untuk mencakup shortcode Instagram (termasuk trailing slash)
   const match = url.match(/\/(?:p|reel|reels)\/([A-Za-z0-9_\-]+)/);
   const shortcode = match ? match[1] : null;
   if (!shortcode) return null;
 
   const targetUrl = `https://www.instagram.com/p/${shortcode}/`;
 
-  // 1. Try Provider Utama: NoEmbed API
+  // 1. Provider Utama: NoEmbed API
   try {
     const res = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(targetUrl)}`);
     if (res.ok) {
@@ -39,20 +39,21 @@ export async function fetchInstagramDataClient(url: string): Promise<InstagramCl
     console.warn("NoEmbed provider failed:", err);
   }
 
-  // 2. Try Provider Cadangan: CorsProxy
+  // 2. Provider Cadangan: CorsProxy + AllOrigins Embed Scraper
   try {
     const embedUrl = `https://www.instagram.com/p/${shortcode}/embed/captioned/`;
-    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(embedUrl)}`;
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(embedUrl)}`;
     
     const res = await fetch(proxyUrl);
     if (res.ok) {
-      const htmlText = await res.text();
+      const data = await res.json();
+      const htmlText = data.contents || "";
       
-      const userMatch = htmlText.match(/@([a-zA-Z0-9_.]+)/) || htmlText.match(/class="UsernameText">([^<]+)</);
+      const userMatch = htmlText.match(/class="UsernameText"[^>]*>([^<]+)</) || htmlText.match(/@([a-zA-Z0-9_.]+)/);
       let username = userMatch ? userMatch[1].toLowerCase().replace(/[^a-z0-9_.]/g, "").trim() : "";
 
-      const captionMatch = htmlText.match(/class="Caption"[^>]*>([^<]+)</);
-      const caption = captionMatch ? captionMatch[1].trim() : "";
+      const captionMatch = htmlText.match(/class="Caption"[^>]*>([\s\S]*?)<\/div>/) || htmlText.match(/class="Caption"[^>]*>([^<]+)</);
+      const caption = captionMatch ? captionMatch[1].replace(/<[^>]+>/g, "").trim() : "";
 
       if (username) {
         return {
@@ -66,10 +67,10 @@ export async function fetchInstagramDataClient(url: string): Promise<InstagramCl
       }
     }
   } catch (err) {
-    console.warn("CorsProxy extraction failed:", err);
+    console.warn("Client proxy extraction failed:", err);
   }
 
-  // 3. Fallback Darurat Permanen: Ekstrak dari Shortcode agar tidak pernah jadi @unknown
+  // 3. Fallback Darurat: Gunakan shortcode sebagai ID Username sementara
   const cleanShortcode = shortcode.replace(/[^a-zA-Z0-9]/g, "");
   return {
     username: `ig_reel_${cleanShortcode}`,

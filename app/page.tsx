@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import type {
   CreatorSortKey,
   StatusFilter,
@@ -99,6 +99,41 @@ export default function Home() {
     }
   }, []);
 
+  // Helper untuk memperkaya data Instagram melalui client-side fallback
+  const enrichInstagramVideo = useCallback(
+    async (v: VideoItem, cleanHashtag: string): Promise<VideoItem> => {
+      const isUnknown =
+        !v.authorName ||
+        v.authorName.toLowerCase() === "unknown" ||
+        v.authorName.startsWith("ig_");
+
+      if (v.platform === "instagram" && (v.status === "error" || isUnknown)) {
+        const clientData = await fetchInstagramDataClient(v.sourceUrl);
+        if (clientData && clientData.username) {
+          const cleanUsername = clientData.username.toLowerCase().trim();
+          const captionText = clientData.caption || v.title;
+          const isQualified = cleanHashtag
+            ? captionText.toLowerCase().includes(`#${cleanHashtag}`)
+            : true;
+
+          return {
+            ...v,
+            authorName: cleanUsername,
+            authorDisplayName: `@${cleanUsername}`,
+            authorUrl: `https://www.instagram.com/${cleanUsername}`,
+            title: captionText,
+            likes: clientData.likes || v.likes,
+            coverUrl: clientData.thumbnail || v.coverUrl,
+            status: (isQualified ? "qualified" : "unqualified") as VideoStatus,
+            errorMessage: undefined,
+          };
+        }
+      }
+      return v;
+    },
+    []
+  );
+
   async function handleScan() {
     if (!targetHashtag.trim() || !urlsInput.trim()) return;
 
@@ -136,36 +171,7 @@ export default function Home() {
 
         if (data.videos) {
           const processedVideos = await Promise.all(
-            data.videos.map(async (v: VideoItem) => {
-              const isUnknown =
-                !v.authorName ||
-                v.authorName.toLowerCase() === "unknown" ||
-                v.authorName.startsWith("ig_");
-
-              if (v.platform === "instagram" && (v.status === "error" || isUnknown)) {
-                const clientData = await fetchInstagramDataClient(v.sourceUrl);
-                if (clientData && clientData.username) {
-                  const cleanUsername = clientData.username.toLowerCase().trim();
-                  const captionText = clientData.caption || v.title;
-                  const isQualified = cleanHashtag
-                    ? captionText.toLowerCase().includes(`#${cleanHashtag}`)
-                    : true;
-
-                  return {
-                    ...v,
-                    authorName: cleanUsername,
-                    authorDisplayName: `@${cleanUsername}`,
-                    authorUrl: `https://www.instagram.com/${cleanUsername}`,
-                    title: captionText,
-                    likes: clientData.likes || v.likes,
-                    coverUrl: clientData.thumbnail || v.coverUrl,
-                    status: (isQualified ? "qualified" : "unqualified") as VideoStatus,
-                    errorMessage: undefined,
-                  };
-                }
-              }
-              return v;
-            })
+            data.videos.map((v: VideoItem) => enrichInstagramVideo(v, cleanHashtag))
           );
 
           setAllVideos((prev) => [...prev, ...processedVideos]);
@@ -180,37 +186,20 @@ export default function Home() {
         const errored = await Promise.all(
           chunk.map(async (u: string) => {
             const fallbackVideo = makeErrorVideo(u, errorMessage);
-            if (fallbackVideo.platform === "instagram") {
-              const clientData = await fetchInstagramDataClient(u);
-              if (clientData && clientData.username) {
-                const cleanUsername = clientData.username.toLowerCase().trim();
-                const captionText = clientData.caption || fallbackVideo.title;
-                const isQualified = cleanHashtag
-                  ? captionText.toLowerCase().includes(`#${cleanHashtag}`)
-                  : true;
-
-                return {
-                  ...fallbackVideo,
-                  authorName: cleanUsername,
-                  authorDisplayName: `@${cleanUsername}`,
-                  authorUrl: `https://www.instagram.com/${cleanUsername}`,
-                  title: captionText,
-                  likes: clientData.likes || fallbackVideo.likes,
-                  coverUrl: clientData.thumbnail || fallbackVideo.coverUrl,
-                  status: (isQualified ? "qualified" : "unqualified") as VideoStatus,
-                  errorMessage: undefined,
-                };
-              }
-            }
-            return fallbackVideo;
+            return await enrichInstagramVideo(fallbackVideo, cleanHashtag);
           })
         );
 
         setAllVideos((prev) => [...prev, ...errored]);
         collectedVideos.push(...errored);
+        toCache.push(
+          ...errored.map((v: VideoItem) => ({ sourceUrl: v.sourceUrl, video: v }))
+        );
       }
 
-      setProgress((prev) => (prev ? { ...prev, done: Math.min(prev.total, prev.done + chunk.length) } : null));
+      setProgress((prev) =>
+        prev ? { ...prev, done: Math.min(prev.total, prev.done + chunk.length) } : null
+      );
     }
 
     if (toCache.length > 0) {
