@@ -41,7 +41,7 @@ function parseUrlsFromText(text: string): string[] {
 function makeErrorVideo(sourceUrl: string, message: string): VideoItem {
   const isYouTube = sourceUrl.includes("youtube.com") || sourceUrl.includes("youtu.be");
   const isInstagram = sourceUrl.includes("instagram.com");
-  
+
   let platform: "youtube" | "tiktok" | "instagram" = "tiktok";
   if (isYouTube) platform = "youtube";
   if (isInstagram) platform = "instagram";
